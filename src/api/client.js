@@ -1,11 +1,64 @@
 import tokenManager from '../auth/token_manager.js';
 import config from '../config/config.js';
+import { getUserOrSharedToken } from '../admin/user_manager.js';
+import logger from '../utils/logger.js';
 
-export async function generateAssistantResponse(requestBody, callback) {
-  const token = await tokenManager.getToken();
-  
-  if (!token) {
-    throw new Error('没有可用的token，请运行 npm run login 获取token');
+export async function generateAssistantResponse(requestBody, tokenSource, callbackOrOptions) {
+  // 参数归一化：兼容旧版 (requestBody, callback) 与新版 (requestBody, tokenSource, options)
+  let onData = null;
+  let onRawLine = null;
+
+  // 如果第二个参数是函数，视为数据回调，tokenSource 置空
+  if (typeof tokenSource === 'function') {
+    onData = tokenSource;
+    tokenSource = undefined;
+  }
+
+  if (typeof callbackOrOptions === 'function') {
+    onData = callbackOrOptions;
+  } else if (callbackOrOptions && typeof callbackOrOptions === 'object') {
+    if (typeof callbackOrOptions.onData === 'function') onData = callbackOrOptions.onData;
+    if (typeof callbackOrOptions.callback === 'function') onData = callbackOrOptions.callback;
+    if (typeof callbackOrOptions.onRawLine === 'function') onRawLine = callbackOrOptions.onRawLine;
+  }
+
+  const emitData = (payload) => {
+    if (typeof onData === 'function') {
+      try {
+        onData(payload);
+      } catch (err) {
+        logger.warn('处理数据回调失败', { error: err?.message || err });
+      }
+    }
+  };
+
+  const emitRawLine = (line) => {
+    if (typeof onRawLine === 'function') {
+      try {
+        onRawLine(line);
+      } catch (err) {
+        logger.warn('处理原始流回调失败', { error: err?.message || err });
+      }
+    }
+  };
+  let token;
+
+  if (tokenSource && tokenSource.type === 'user') {
+    // 用户 API Key - 使用用户自己的 Token 或共享 Token
+    token = await getUserOrSharedToken(tokenSource.userId);
+    if (!token) {
+      throw new Error('没有可用的 Token。请在用户中心添加 Google Token 或使用共享 Token');
+    }
+  } else {
+    // 管理员密钥 - 使用管理员 Token 池
+    token = await tokenManager.getToken();
+    if (!token) {
+      throw new Error('没有可用的token，请运行 npm run login 获取token');
+    }
+  }
+  // 如果请求体未指定 project，优先使用 token 携带的 project_id
+  if (!requestBody.project && token?.project_id) {
+    requestBody.project = token.project_id;
   }
   
   const url = config.api.url;
@@ -33,18 +86,30 @@ export async function generateAssistantResponse(requestBody, callback) {
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = '';
   let thinkingStarted = false;
   let toolCalls = [];
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-    
-    const chunk = decoder.decode(value);
-    const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
-    
-    for (const line of lines) {
-      const jsonStr = line.slice(6);
+    if (done) {
+      buffer += decoder.decode();
+    } else {
+      buffer += decoder.decode(value, { stream: true });
+    }
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith('data:')) continue;
+
+      // 提供原始 SSE 行给上层（用于自定义转换）
+      emitRawLine(line);
+
+      const jsonStr = line.slice(5).trim();
+      if (!jsonStr || jsonStr === '[DONE]' || jsonStr === 'data: [DONE]') continue;
       try {
         const data = JSON.parse(jsonStr);
         const parts = data.response?.candidates?.[0]?.content?.parts;
@@ -52,16 +117,16 @@ export async function generateAssistantResponse(requestBody, callback) {
           for (const part of parts) {
             if (part.thought === true) {
               if (!thinkingStarted) {
-                callback({ type: 'thinking', content: '<think>\n' });
+                emitData({ type: 'thinking', content: '<think>\n' });
                 thinkingStarted = true;
               }
-              callback({ type: 'thinking', content: part.text || '' });
+              emitData({ type: 'thinking', content: part.text || '' });
             } else if (part.text !== undefined) {
               if (thinkingStarted) {
-                callback({ type: 'thinking', content: '\n</think>\n' });
+                emitData({ type: 'thinking', content: '\n</think>\n' });
                 thinkingStarted = false;
               }
-              callback({ type: 'text', content: part.text });
+              emitData({ type: 'text', content: part.text });
             } else if (part.functionCall) {
               toolCalls.push({
                 id: part.functionCall.id,
@@ -74,28 +139,90 @@ export async function generateAssistantResponse(requestBody, callback) {
             }
           }
         }
-        
+
         // 当遇到 finishReason 时，发送所有收集的工具调用
         if (data.response?.candidates?.[0]?.finishReason && toolCalls.length > 0) {
           if (thinkingStarted) {
-            callback({ type: 'thinking', content: '\n</think>\n' });
+            emitData({ type: 'thinking', content: '\n</think>\n' });
             thinkingStarted = false;
           }
-          callback({ type: 'tool_calls', tool_calls: toolCalls });
+          emitData({ type: 'tool_calls', tool_calls: toolCalls });
           toolCalls = [];
         }
       } catch (e) {
-        // 忽略解析错误
+        logger.warn('解析流数据失败', { line: jsonStr, error: e?.message || e });
+      }
+    }
+
+    if (done) break;
+  }
+
+  // 处理未以换行结尾的残余数据
+  const tail = buffer.trim();
+  if (tail.startsWith('data:')) {
+    emitRawLine(tail);
+    const jsonStr = tail.slice(5).trim();
+    if (jsonStr && jsonStr !== '[DONE]' && jsonStr !== 'data: [DONE]') {
+      try {
+        const data = JSON.parse(jsonStr);
+        const parts = data.response?.candidates?.[0]?.content?.parts;
+        if (parts) {
+          for (const part of parts) {
+            if (part.thought === true) {
+              if (!thinkingStarted) {
+                emitData({ type: 'thinking', content: '<think>\n' });
+                thinkingStarted = true;
+              }
+              emitData({ type: 'thinking', content: part.text || '' });
+            } else if (part.text !== undefined) {
+              if (thinkingStarted) {
+                emitData({ type: 'thinking', content: '\n</think>\n' });
+                thinkingStarted = false;
+              }
+              emitData({ type: 'text', content: part.text });
+            } else if (part.functionCall) {
+              toolCalls.push({
+                id: part.functionCall.id,
+                type: 'function',
+                function: {
+                  name: part.functionCall.name,
+                  arguments: JSON.stringify(part.functionCall.args)
+                }
+              });
+            }
+          }
+        }
+
+        if (data.response?.candidates?.[0]?.finishReason && toolCalls.length > 0) {
+          if (thinkingStarted) {
+            emitData({ type: 'thinking', content: '\n</think>\n' });
+            thinkingStarted = false;
+          }
+          emitData({ type: 'tool_calls', tool_calls: toolCalls });
+          toolCalls = [];
+        }
+      } catch (e) {
+        logger.warn('解析残余数据失败', { line: jsonStr, error: e?.message || e });
       }
     }
   }
 }
 
-export async function getAvailableModels() {
-  const token = await tokenManager.getToken();
-  
-  if (!token) {
-    throw new Error('没有可用的token，请运行 npm run login 获取token');
+export async function getAvailableModels(tokenSource) {
+  let token;
+
+  if (tokenSource && tokenSource.type === 'user') {
+    // 用户 API Key - 使用用户自己的 Token 或共享 Token
+    token = await getUserOrSharedToken(tokenSource.userId);
+    if (!token) {
+      throw new Error('没有可用的 Token。请在用户中心添加 Google Token 或使用共享 Token');
+    }
+  } else {
+    // 管理员密钥 - 使用管理员 Token 池
+    token = await tokenManager.getToken();
+    if (!token) {
+      throw new Error('没有可用的token，请运行 npm run login 获取token');
+    }
   }
   
   const response = await fetch(config.api.modelsUrl, {

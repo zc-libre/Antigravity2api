@@ -2,12 +2,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { log } from '../utils/logger.js';
+import config from '../config/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CLIENT_ID = '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com';
-const CLIENT_SECRET = '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';
+const DEFAULT_CLIENT_ID = config.oauth.clientId;
+const DEFAULT_CLIENT_SECRET = config.oauth.clientSecret;
 
 class TokenManager {
   constructor(filePath = path.join(__dirname,'..','..','data' ,'accounts.json')) {
@@ -32,7 +33,14 @@ class TokenManager {
       const data = fs.readFileSync(this.filePath, 'utf8');
       const tokenArray = JSON.parse(data);
       this.cachedData = tokenArray; // 缓存原始数据
-      this.tokens = tokenArray.filter(token => token.enable !== false);
+      this.tokens = tokenArray
+        .filter(token => token.enable !== false)
+        .map(token => ({
+          ...token,
+          client_id: token.client_id || DEFAULT_CLIENT_ID,
+          client_secret: token.client_secret || DEFAULT_CLIENT_SECRET,
+          project_id: token.project_id || null
+        }));
       this.currentIndex = 0;
       this.lastLoadTime = Date.now();
       log.info(`成功加载 ${this.tokens.length} 个可用token`);
@@ -53,11 +61,22 @@ class TokenManager {
     return Date.now() >= expiresAt - 300000;
   }
 
+  getClientId(token) {
+    return token.client_id || DEFAULT_CLIENT_ID;
+  }
+
+  getClientSecret(token) {
+    return token.client_secret || DEFAULT_CLIENT_SECRET;
+  }
+
   async refreshToken(token) {
     log.info('正在刷新token...');
+    const clientId = this.getClientId(token);
+    const clientSecret = this.getClientSecret(token);
+
     const body = new URLSearchParams({
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       grant_type: 'refresh_token',
       refresh_token: token.refresh_token
     });
