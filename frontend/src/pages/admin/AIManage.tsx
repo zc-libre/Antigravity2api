@@ -29,47 +29,74 @@ import {
 
 interface AIConfig {
   enabled: boolean
-  interval_hours: number
-  rules: string[]
+  apiKey: string
+  apiEndpoint: string
   model: string
-  system_prompt: string
+  checkIntervalHours: number
+  autoModerateThreshold: number
+  systemPrompt: string
 }
 
 interface AILog {
-  id: string
-  timestamp: string
-  action: 'approve' | 'reject' | 'warning'
-  token_id: string
-  reason: string
+  timestamp: number
+  date: string
+  userId?: string
+  username?: string
+  action: string
+  confidence?: number
+  reason?: string
+  evidence?: string
+  error?: string
+  summary?: {
+    totalChecked: number
+    bannedCount: number
+    flaggedCount: number
+    normalCount: number
+    errorCount: number
+    durationMs: number
+  }
 }
 
 interface AIStats {
   totalRuns: number
-  tokensChecked: number
-  tokensApproved: number
-  tokensRejected: number
+  totalChecked: number
+  totalBanned: number
+  totalFlagged: number
+  avgDuration: number
+  lastRun: {
+    timestamp: number
+    date: string
+    summary: {
+      totalChecked: number
+      bannedCount: number
+      flaggedCount: number
+    }
+  } | null
 }
 
 export function AIManage() {
   const [config, setConfig] = useState<AIConfig>({
     enabled: false,
-    interval_hours: 24,
-    rules: [],
-    model: 'gemini-pro',
-    system_prompt: '',
+    apiKey: '',
+    apiEndpoint: '',
+    model: 'gemini-2.0-flash-exp',
+    checkIntervalHours: 1,
+    autoModerateThreshold: 0.8,
+    systemPrompt: '',
   })
   const [logs, setLogs] = useState<AILog[]>([])
   const [stats, setStats] = useState<AIStats>({
     totalRuns: 0,
-    tokensChecked: 0,
-    tokensApproved: 0,
-    tokensRejected: 0,
+    totalChecked: 0,
+    totalBanned: 0,
+    totalFlagged: 0,
+    avgDuration: 0,
+    lastRun: null,
   })
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [running, setRunning] = useState(false)
-  const [rulesText, setRulesText] = useState('')
 
   useEffect(() => {
     loadData()
@@ -77,28 +104,41 @@ export function AIManage() {
 
   const loadData = async () => {
     try {
-      const [configRes, logsRes] = await Promise.all([
+      const [configRes, logsRes, statsRes] = await Promise.all([
         adminApi.getAIConfig(),
         adminApi.getAILogs(),
+        adminApi.getAIStatistics(),
       ])
 
       if (configRes.success && configRes.data) {
-        const data = configRes.data as AIConfig & { stats?: AIStats }
+        const data = configRes.data as AIConfig
         setConfig({
           enabled: data.enabled ?? false,
-          interval_hours: data.interval_hours ?? 24,
-          rules: data.rules ?? [],
-          model: data.model ?? 'gemini-pro',
-          system_prompt: data.system_prompt ?? '',
+          apiKey: data.apiKey ?? '',
+          apiEndpoint: data.apiEndpoint ?? '',
+          model: data.model ?? 'gemini-2.0-flash-exp',
+          checkIntervalHours: data.checkIntervalHours ?? 1,
+          autoModerateThreshold: data.autoModerateThreshold ?? 0.8,
+          systemPrompt: data.systemPrompt ?? '',
         })
-        setRulesText((data.rules ?? []).join('\n'))
-        if (data.stats) {
-          setStats(data.stats)
-        }
       }
 
       if (logsRes.success && logsRes.data) {
-        setLogs(logsRes.data as AILog[])
+        // 后端返回 { logs: [...] } 结构
+        const logsData = logsRes.data as { logs?: AILog[] }
+        setLogs(Array.isArray(logsData.logs) ? logsData.logs : [])
+      }
+
+      if (statsRes.success && statsRes.data) {
+        const data = statsRes.data as AIStats
+        setStats({
+          totalRuns: data.totalRuns ?? 0,
+          totalChecked: data.totalChecked ?? 0,
+          totalBanned: data.totalBanned ?? 0,
+          totalFlagged: data.totalFlagged ?? 0,
+          avgDuration: data.avgDuration ?? 0,
+          lastRun: data.lastRun ?? null,
+        })
       }
     } catch (error) {
       console.error('Failed to load AI data:', error)
@@ -110,10 +150,7 @@ export function AIManage() {
   const handleSaveConfig = async () => {
     setSubmitting(true)
     try {
-      const res = await adminApi.updateAIConfig({
-        ...config,
-        rules: rulesText.split('\n').filter(r => r.trim()),
-      })
+      const res = await adminApi.updateAIConfig(config)
       if (res.success) {
         setMessage({ type: 'success', text: 'AI 配置保存成功' })
         loadData()
@@ -144,36 +181,58 @@ export function AIManage() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('zh-CN')
+  const formatDate = (log: AILog) => {
+    if (log.date) {
+      return new Date(log.date).toLocaleString('zh-CN')
+    }
+    if (log.timestamp) {
+      return new Date(log.timestamp).toLocaleString('zh-CN')
+    }
+    return '-'
   }
 
   const getActionBadge = (action: string) => {
     switch (action) {
-      case 'approve':
-        return (
-          <Badge variant="success" className="gap-1">
-            <CheckCircle className="h-3 w-3" />
-            通过
-          </Badge>
-        )
-      case 'reject':
+      case 'auto_banned':
         return (
           <Badge variant="destructive" className="gap-1">
             <XCircle className="h-3 w-3" />
-            拒绝
+            自动封禁
           </Badge>
         )
-      case 'warning':
+      case 'flagged':
         return (
           <Badge variant="warning" className="gap-1">
             <AlertTriangle className="h-3 w-3" />
-            警告
+            标记可疑
+          </Badge>
+        )
+      case 'analysis_failed':
+        return (
+          <Badge variant="secondary" className="gap-1">
+            <XCircle className="h-3 w-3" />
+            分析失败
+          </Badge>
+        )
+      case 'moderation_completed':
+        return (
+          <Badge variant="success" className="gap-1">
+            <CheckCircle className="h-3 w-3" />
+            审核完成
           </Badge>
         )
       default:
         return <Badge variant="outline">{action}</Badge>
     }
+  }
+
+  const getLogDescription = (log: AILog) => {
+    if (log.action === 'moderation_completed' && log.summary) {
+      return `检查 ${log.summary.totalChecked} 用户, 封禁 ${log.summary.bannedCount}, 标记 ${log.summary.flaggedCount}`
+    }
+    if (log.reason) return log.reason
+    if (log.error) return `错误: ${log.error}`
+    return '-'
   }
 
   return (
@@ -198,30 +257,30 @@ export function AIManage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">检查Token数</CardTitle>
+            <CardTitle className="text-sm font-medium">检查用户数</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.tokensChecked}</div>
+            <div className="text-2xl font-bold">{stats.totalChecked}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">通过Token</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium">标记可疑</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.tokensApproved}</div>
+            <div className="text-2xl font-bold text-yellow-600">{stats.totalFlagged}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">拒绝Token</CardTitle>
+            <CardTitle className="text-sm font-medium">自动封禁</CardTitle>
             <XCircle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.tokensRejected}</div>
+            <div className="text-2xl font-bold text-red-600">{stats.totalBanned}</div>
           </CardContent>
         </Card>
       </div>
@@ -242,7 +301,7 @@ export function AIManage() {
             <div>
               <Label className="text-base">启用 AI 自动审核</Label>
               <p className="text-sm text-muted-foreground">
-                开启后将定期自动审核 Token
+                开启后将定期自动审核共享用户
               </p>
             </div>
             <Switch
@@ -253,41 +312,63 @@ export function AIManage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>审核间隔（小时）</Label>
+              <Label>API 端点</Label>
               <Input
-                type="number"
-                value={config.interval_hours}
-                onChange={(e) => setConfig({ ...config, interval_hours: parseInt(e.target.value) || 24 })}
-                min="1"
+                value={config.apiEndpoint}
+                onChange={(e) => setConfig({ ...config, apiEndpoint: e.target.value })}
+                placeholder="https://api.example.com/v1/chat/completions"
               />
             </div>
+            <div className="space-y-2">
+              <Label>API 密钥</Label>
+              <Input
+                type="password"
+                value={config.apiKey}
+                onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+                placeholder="sk-..."
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>使用模型</Label>
               <Input
                 value={config.model}
                 onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                placeholder="gemini-pro"
+                placeholder="gemini-2.0-flash-exp"
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>审核规则（每行一条）</Label>
-            <Textarea
-              value={rulesText}
-              onChange={(e) => setRulesText(e.target.value)}
-              placeholder="输入审核规则，每行一条..."
-              rows={4}
-            />
+            <div className="space-y-2">
+              <Label>审核间隔（小时）</Label>
+              <Input
+                type="number"
+                value={config.checkIntervalHours}
+                onChange={(e) => setConfig({ ...config, checkIntervalHours: parseInt(e.target.value) || 1 })}
+                min="1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>置信度阈值</Label>
+              <Input
+                type="number"
+                value={config.autoModerateThreshold}
+                onChange={(e) => setConfig({ ...config, autoModerateThreshold: parseFloat(e.target.value) || 0.8 })}
+                min="0"
+                max="1"
+                step="0.1"
+              />
+              <p className="text-xs text-muted-foreground">0-1 之间，超过此值自动封禁</p>
+            </div>
           </div>
 
           <div className="space-y-2">
             <Label>系统提示词</Label>
             <Textarea
-              value={config.system_prompt}
-              onChange={(e) => setConfig({ ...config, system_prompt: e.target.value })}
+              value={config.systemPrompt}
+              onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
               placeholder="输入 AI 系统提示词..."
-              rows={4}
+              rows={6}
             />
           </div>
 
@@ -336,23 +417,27 @@ export function AIManage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>时间</TableHead>
-                  <TableHead>Token ID</TableHead>
+                  <TableHead>用户</TableHead>
                   <TableHead>操作</TableHead>
-                  <TableHead>原因</TableHead>
+                  <TableHead>详情</TableHead>
+                  <TableHead>置信度</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="text-sm">
-                      {formatDate(log.timestamp)}
+                {logs.map((log, index) => (
+                  <TableRow key={`${log.timestamp}-${index}`}>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {formatDate(log)}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {log.token_id.substring(0, 8)}...
+                      {log.username || (log.action === 'moderation_completed' ? '系统' : '-')}
                     </TableCell>
                     <TableCell>{getActionBadge(log.action)}</TableCell>
                     <TableCell className="text-sm max-w-[300px] truncate">
-                      {log.reason}
+                      {getLogDescription(log)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {log.confidence !== undefined ? `${(log.confidence * 100).toFixed(0)}%` : '-'}
                     </TableCell>
                   </TableRow>
                 ))}

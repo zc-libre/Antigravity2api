@@ -53,43 +53,109 @@ function extractImagesFromContent(content) {
 
   return result;
 }
-function handleUserMessage(extracted, antigravityMessages){
+function handleUserMessage(extracted, antigravityMessages, enableThinking){
+  const parts = [];
+  if (extracted.text) {
+    // 当开启思考且存在图片时，显式标记为非思考文本，避免 API 校验错误
+    if (enableThinking && extracted.images.length > 0) {
+      parts.push({ text: extracted.text, thought: false });
+    } else {
+      parts.push({ text: extracted.text });
+    }
+  }
+  parts.push(...extracted.images);
+
+  if (parts.length === 0) {
+    parts.push({ text: "" });
+  }
+
   antigravityMessages.push({
     role: "user",
-    parts: [
-      {
-        text: extracted.text
-      },
-      ...extracted.images
-    ]
-  })
+    parts
+  });
 }
-function handleAssistantMessage(message, antigravityMessages){
+function handleAssistantMessage(message, antigravityMessages, isImageModel = false, enableThinking = false){
   const lastMessage = antigravityMessages[antigravityMessages.length - 1];
-  const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
-  const hasContent = message.content && message.content.trim() !== '';
+  const hasToolCalls = message.tool_calls && Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+  const hasContent = message.content && (typeof message.content === 'string' ? message.content.trim() !== '' : true);
   
-  const antigravityTools = hasToolCalls ? message.tool_calls.map(toolCall => ({
-    functionCall: {
-      id: toolCall.id,
-      name: toolCall.function.name,
-      args: {
-        query: toolCall.function.arguments
-      }
+  // 解析工具调用参数，兼容字符串/对象
+  const antigravityTools = hasToolCalls ? message.tool_calls.map(toolCall => {
+    let argsObj;
+    try {
+      argsObj = typeof toolCall.function.arguments === 'string'
+        ? JSON.parse(toolCall.function.arguments)
+        : toolCall.function.arguments;
+    } catch (e) {
+      argsObj = {};
     }
-  })) : [];
+    return {
+      functionCall: {
+        id: toolCall.id,
+        name: toolCall.function.name,
+        args: argsObj
+      }
+    };
+  }) : [];
   
   if (lastMessage?.role === "model" && hasToolCalls && !hasContent){
-    lastMessage.parts.push(...antigravityTools)
-  }else{
+    lastMessage.parts.push(...antigravityTools);
+  } else {
     const parts = [];
-    if (hasContent) parts.push({ text: message.content });
+    if (hasContent) {
+      let textContent = '';
+      if (typeof message.content === 'string') {
+        textContent = message.content;
+      } else if (Array.isArray(message.content)) {
+        textContent = message.content
+          .filter(item => item.type === 'text')
+          .map(item => item.text)
+          .join('');
+      }
+
+      if (isImageModel) {
+        // 图片模型：去掉 markdown 占位符，统一标记为思考块
+        textContent = textContent.replace(/!\[.*?\]\(data:image\/[^)]+\)/g, '');
+        textContent = textContent.replace(/\[图像生成完成[^\]]*\]/g, '');
+        textContent = textContent.replace(/\n{3,}/g, '\n\n').trim();
+        if (textContent) {
+          parts.push({ text: textContent, thought: true });
+        }
+      } else {
+        // 非图片模型：拆分 <think> 片段
+        const thinkMatches = textContent.match(/<think>([\s\S]*?)<\/think>/g);
+        if (thinkMatches) {
+          for (const match of thinkMatches) {
+            const thinkContent = match.replace(/<\/?think>/g, '').trim();
+            if (thinkContent) {
+              parts.push({ text: thinkContent, thought: true });
+            }
+          }
+        }
+
+        textContent = textContent.replace(/<think>[\s\S]*?<\/think>/g, '');
+        textContent = textContent.replace(/\n{3,}/g, '\n\n').trim();
+
+        if (textContent) {
+          if (enableThinking && parts.length > 0) {
+            parts.push({ text: textContent, thought: false });
+          } else {
+            parts.push({ text: textContent });
+          }
+        }
+      }
+    }
+
     parts.push(...antigravityTools);
-    
+
+    if (parts.length === 0) {
+      parts.push({ text: "" });
+    }
+
     antigravityMessages.push({
       role: "model",
       parts
-    })
+    });
   }
 }
 function handleToolCall(message, antigravityMessages){
@@ -129,14 +195,16 @@ function handleToolCall(message, antigravityMessages){
     });
   }
 }
-function openaiMessageToAntigravity(openaiMessages){
+function openaiMessageToAntigravity(openaiMessages, enableThinking = false, modelName = ''){
   const antigravityMessages = [];
+  const isImageModel = modelName.endsWith('-image');
+
   for (const message of openaiMessages) {
     if (message.role === "user" || message.role === "system") {
       const extracted = extractImagesFromContent(message.content);
-      handleUserMessage(extracted, antigravityMessages);
+      handleUserMessage(extracted, antigravityMessages, enableThinking);
     } else if (message.role === "assistant") {
-      handleAssistantMessage(message, antigravityMessages);
+      handleAssistantMessage(message, antigravityMessages, isImageModel, enableThinking);
     } else if (message.role === "tool") {
       handleToolCall(message, antigravityMessages);
     }
@@ -157,16 +225,21 @@ function generateGenerationConfig(parameters, enableThinking, actualModelName){
       "<|context_request|>",
       "<|endoftext|>",
       "<|end_of_turn|>"
-    ],
-    thinkingConfig: {
+    ]
+  };
+
+  // 部分图片模型不支持 thinkingConfig
+  if (actualModelName !== 'gemini-2.5-flash-image') {
+    generationConfig.thinkingConfig = {
       includeThoughts: enableThinking,
       thinkingBudget: enableThinking ? 1024 : 0
-    }
+    };
   }
+
   if (enableThinking && actualModelName.includes("claude")){
     delete generationConfig.topP;
   }
-  return generationConfig
+  return generationConfig;
 }
 function convertOpenAIToolsToAntigravity(openaiTools){
   if (!openaiTools || openaiTools.length === 0) return [];
@@ -184,34 +257,42 @@ function convertOpenAIToolsToAntigravity(openaiTools){
   })
 }
 function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
-  const enableThinking = modelName.endsWith('-thinking') || 
-    modelName === 'gemini-2.5-pro' || 
-    modelName.startsWith('gemini-3-pro-') ||
-    modelName === "rev19-uic3-1p" ||
-    modelName === "gpt-oss-120b-medium"
-  const actualModelName = modelName.endsWith('-thinking') ? modelName.slice(0, -9) : modelName;
+  const isExplicitThinking = modelName.endsWith('-thinking');
+  const actualModelName = isExplicitThinking ? modelName.slice(0, -9) : modelName;
+
+  const supportsThinking = modelName.endsWith('-thinking') ||
+    actualModelName === 'gemini-2.5-pro' ||
+    actualModelName.startsWith('gemini-3-pro-') ||
+    actualModelName === "rev19-uic3-1p" ||
+    actualModelName === "gpt-oss-120b-medium";
+  const enableThinking = supportsThinking;
   
-  return{
+  const requestBody = {
     project: generateProjectId(),
     requestId: generateRequestId(),
     request: {
-      contents: openaiMessageToAntigravity(openaiMessages),
+      contents: openaiMessageToAntigravity(openaiMessages, enableThinking, actualModelName),
       systemInstruction: {
         role: "user",
         parts: [{ text: config.systemInstruction }]
       },
-      tools: convertOpenAIToolsToAntigravity(openaiTools),
-      toolConfig: {
-        functionCallingConfig: {
-          mode: "VALIDATED"
-        }
-      },
       generationConfig: generateGenerationConfig(parameters, enableThinking, actualModelName),
       sessionId: generateSessionId()
     },
-    model: actualModelName,
+    model: modelName,
     userAgent: "antigravity"
+  };
+
+  if (openaiTools && openaiTools.length > 0) {
+    requestBody.request.tools = convertOpenAIToolsToAntigravity(openaiTools);
+    requestBody.request.toolConfig = {
+      functionCallingConfig: {
+        mode: "VALIDATED"
+      }
+    };
   }
+
+  return requestBody;
 }
 // HTML转义函数，防止XSS攻击
 function escapeHtml(unsafe) {

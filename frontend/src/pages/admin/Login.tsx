@@ -27,7 +27,8 @@ export function AdminLogin() {
     try {
       const res = await adminApi.login(password)
       if (res.success && res.data) {
-        localStorage.setItem('admin_session', res.data.session)
+        // 后端返回的是 token 字段
+        localStorage.setItem('admin_token', res.data.token)
         navigate('/admin')
       } else {
         setError(res.error || '登录失败，密码错误')

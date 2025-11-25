@@ -89,17 +89,29 @@ export function Announcements() {
 
     setSubmitting(true)
     try {
-      const formData = new FormData()
-      formData.append('title', title)
-      formData.append('content', content)
-      formData.append('type', type)
-      formData.append('pinned', String(pinned))
-      
-      images.forEach((file) => {
-        formData.append('images', file)
-      })
+      // 先上传图片
+      const imageUrls: string[] = []
+      if (images.length > 0) {
+        for (const file of images) {
+          try {
+            const uploadResult = await adminApi.uploadAnnouncementImage(file)
+            if (uploadResult.url) {
+              imageUrls.push(uploadResult.url)
+            }
+          } catch (e) {
+            console.error('图片上传失败:', e)
+          }
+        }
+      }
 
-      const res = await adminApi.createAnnouncement(formData)
+      // 然后创建公告
+      const res = await adminApi.createAnnouncement({
+        title,
+        content,
+        type,
+        pinned,
+        images: imageUrls,
+      })
       if (res.success) {
         setMessage({ type: 'success', text: '公告发布成功' })
         setTitle('')

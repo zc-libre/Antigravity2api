@@ -36,14 +36,13 @@ import {
 } from 'lucide-react'
 
 interface Token {
-  id: string
+  index: number
   access_token: string
   refresh_token?: string
-  expires_at?: number
-  enabled: boolean
-  created_at: string
-  last_used?: string
-  request_count?: number
+  expires_in?: number
+  timestamp?: number
+  enable: boolean
+  created?: string
 }
 
 export function TokenManage() {
@@ -62,7 +61,7 @@ export function TokenManage() {
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [tokenToDelete, setTokenToDelete] = useState<string | null>(null)
+  const [tokenToDelete, setTokenToDelete] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -133,15 +132,7 @@ export function TokenManage() {
 
     setSubmitting(true)
     try {
-      // 从回调 URL 中提取 code 参数
-      const url = new URL(callbackUrl)
-      const code = url.searchParams.get('code')
-      if (!code) {
-        setMessage({ type: 'error', text: '无效的回调链接，未找到 code 参数' })
-        return
-      }
-
-      const res = await adminApi.addToken({ access_token: code })
+      const res = await adminApi.addTokenCallback(callbackUrl)
       if (res.success) {
         setMessage({ type: 'success', text: 'Token 添加成功' })
         setCallbackUrl('')
@@ -150,7 +141,7 @@ export function TokenManage() {
         setMessage({ type: 'error', text: res.error || 'Token 添加失败' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '无效的回调链接格式' })
+      setMessage({ type: 'error', text: '添加 Token 失败' })
     } finally {
       setSubmitting(false)
     }
@@ -183,9 +174,9 @@ export function TokenManage() {
     }
   }
 
-  const handleToggleToken = async (tokenId: string) => {
+  const handleToggleToken = async (index: number, currentEnabled: boolean) => {
     try {
-      const res = await adminApi.toggleToken(tokenId)
+      const res = await adminApi.toggleToken(index, !currentEnabled)
       if (res.success) {
         loadTokens()
       }
@@ -195,7 +186,7 @@ export function TokenManage() {
   }
 
   const handleDeleteToken = async () => {
-    if (!tokenToDelete) return
+    if (tokenToDelete === null) return
 
     try {
       const res = await adminApi.deleteToken(tokenToDelete)
@@ -213,12 +204,14 @@ export function TokenManage() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('zh-CN')
+  const formatTimestamp = (timestamp?: number) => {
+    if (!timestamp) return '-'
+    return new Date(timestamp).toLocaleString('zh-CN')
   }
 
-  const isTokenExpired = (expiresAt?: number) => {
-    if (!expiresAt) return false
+  const isTokenExpired = (token: Token) => {
+    if (!token.timestamp || !token.expires_in) return false
+    const expiresAt = token.timestamp + token.expires_in * 1000
     return Date.now() > expiresAt
   }
 
@@ -381,45 +374,51 @@ export function TokenManage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
+                  <TableHead>#</TableHead>
                   <TableHead>Token</TableHead>
+                  <TableHead>Refresh Token</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead>创建时间</TableHead>
-                  <TableHead>使用次数</TableHead>
                   <TableHead>启用</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {tokens.map((token) => (
-                  <TableRow key={token.id}>
+                  <TableRow key={token.index}>
                     <TableCell className="font-mono text-xs">
-                      {token.id.substring(0, 8)}...
+                      {token.index}
                     </TableCell>
                     <TableCell className="font-mono text-xs max-w-[200px] truncate">
-                      {token.access_token.substring(0, 20)}...
+                      {token.access_token || '-'}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {token.refresh_token === 'exists' ? (
+                        <Badge variant="outline">有</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">无</span>
+                      )}
                     </TableCell>
                     <TableCell>
-                      {isTokenExpired(token.expires_at) ? (
+                      {isTokenExpired(token) ? (
                         <Badge variant="destructive">
                           <XCircle className="h-3 w-3 mr-1" />
                           已过期
                         </Badge>
                       ) : (
-                        <Badge variant="success">
+                        <Badge variant="default" className="bg-green-600">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           有效
                         </Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {formatDate(token.created_at)}
+                      {token.created || formatTimestamp(token.timestamp)}
                     </TableCell>
-                    <TableCell>{token.request_count || 0}</TableCell>
                     <TableCell>
                       <Switch
-                        checked={token.enabled}
-                        onCheckedChange={() => handleToggleToken(token.id)}
+                        checked={token.enable}
+                        onCheckedChange={() => handleToggleToken(token.index, token.enable)}
                       />
                     </TableCell>
                     <TableCell className="text-right">
@@ -428,7 +427,7 @@ export function TokenManage() {
                         size="icon"
                         className="text-destructive hover:text-destructive"
                         onClick={() => {
-                          setTokenToDelete(token.id)
+                          setTokenToDelete(token.index)
                           setDeleteDialogOpen(true)
                         }}
                       >

@@ -57,7 +57,18 @@ export function Settings() {
     try {
       const res = await adminApi.getSettings()
       if (res.success && res.data) {
-        setSettings(res.data as SystemSettings)
+        const data = res.data as Partial<SystemSettings>
+        // 合并默认值，确保所有字段都存在
+        setSettings(prev => ({
+          ...prev,
+          ...data,
+          default_rate_limit: {
+            enabled: false,
+            max_requests: 100,
+            window_seconds: 60,
+            ...data.default_rate_limit,
+          },
+        }))
       }
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -236,27 +247,36 @@ export function Settings() {
               </p>
             </div>
             <Switch
-              checked={settings.default_rate_limit.enabled}
+              checked={settings.default_rate_limit?.enabled ?? false}
               onCheckedChange={(checked) =>
                 setSettings({
                   ...settings,
-                  default_rate_limit: { ...settings.default_rate_limit, enabled: checked },
+                  default_rate_limit: { 
+                    enabled: false,
+                    max_requests: 100,
+                    window_seconds: 60,
+                    ...settings.default_rate_limit, 
+                    enabled: checked 
+                  },
                 })
               }
             />
           </div>
 
-          {settings.default_rate_limit.enabled && (
+          {settings.default_rate_limit?.enabled && (
             <div className="grid gap-4 md:grid-cols-2 p-4 border rounded-lg bg-muted/50">
               <div className="space-y-2">
                 <Label>最大请求数</Label>
                 <Input
                   type="number"
-                  value={settings.default_rate_limit.max_requests}
+                  value={settings.default_rate_limit?.max_requests ?? 100}
                   onChange={(e) =>
                     setSettings({
                       ...settings,
                       default_rate_limit: {
+                        enabled: false,
+                        max_requests: 100,
+                        window_seconds: 60,
                         ...settings.default_rate_limit,
                         max_requests: parseInt(e.target.value) || 100,
                       },
@@ -269,11 +289,14 @@ export function Settings() {
                 <Label>时间窗口（秒）</Label>
                 <Input
                   type="number"
-                  value={settings.default_rate_limit.window_seconds}
+                  value={settings.default_rate_limit?.window_seconds ?? 60}
                   onChange={(e) =>
                     setSettings({
                       ...settings,
                       default_rate_limit: {
+                        enabled: false,
+                        max_requests: 100,
+                        window_seconds: 60,
                         ...settings.default_rate_limit,
                         window_seconds: parseInt(e.target.value) || 60,
                       },

@@ -89,6 +89,8 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
   let buffer = '';
   let thinkingStarted = false;
   let toolCalls = [];
+  let generatedImages = [];
+  const isGeminiModel = (requestBody.model || '').startsWith('gemini-');
 
   while (true) {
     const { done, value } = await reader.read();
@@ -116,17 +118,37 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
         if (parts) {
           for (const part of parts) {
             if (part.thought === true) {
-              if (!thinkingStarted) {
-                emitData({ type: 'thinking', content: '<think>\n' });
-                thinkingStarted = true;
+              if (isGeminiModel) {
+                emitData({ type: 'text', content: part.text || '' });
+              } else {
+                if (!thinkingStarted) {
+                  emitData({ type: 'thinking', content: '<think>\n' });
+                  thinkingStarted = true;
+                }
+                emitData({ type: 'thinking', content: part.text || '' });
               }
-              emitData({ type: 'thinking', content: part.text || '' });
             } else if (part.text !== undefined) {
-              if (thinkingStarted) {
+              // 过滤掉空的非thought文本
+              if (part.text.trim() === '') {
+                continue;
+              }
+              if (thinkingStarted && !isGeminiModel) {
                 emitData({ type: 'thinking', content: '\n</think>\n' });
                 thinkingStarted = false;
               }
               emitData({ type: 'text', content: part.text });
+            } else if (part.inlineData) {
+              generatedImages.push({
+                mimeType: part.inlineData.mimeType,
+                data: part.inlineData.data
+              });
+              emitData({
+                type: 'image',
+                image: {
+                  mimeType: part.inlineData.mimeType,
+                  data: part.inlineData.data
+                }
+              });
             } else if (part.functionCall) {
               toolCalls.push({
                 id: part.functionCall.id,
@@ -141,13 +163,15 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
         }
 
         // 当遇到 finishReason 时，发送所有收集的工具调用
-        if (data.response?.candidates?.[0]?.finishReason && toolCalls.length > 0) {
-          if (thinkingStarted) {
+        if (data.response?.candidates?.[0]?.finishReason) {
+          if (thinkingStarted && !isGeminiModel) {
             emitData({ type: 'thinking', content: '\n</think>\n' });
             thinkingStarted = false;
           }
-          emitData({ type: 'tool_calls', tool_calls: toolCalls });
-          toolCalls = [];
+          if (toolCalls.length > 0) {
+            emitData({ type: 'tool_calls', tool_calls: toolCalls });
+            toolCalls = [];
+          }
         }
       } catch (e) {
         logger.warn('解析流数据失败', { line: jsonStr, error: e?.message || e });
@@ -169,17 +193,37 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
         if (parts) {
           for (const part of parts) {
             if (part.thought === true) {
-              if (!thinkingStarted) {
-                emitData({ type: 'thinking', content: '<think>\n' });
-                thinkingStarted = true;
+              if (isGeminiModel) {
+                emitData({ type: 'text', content: part.text || '' });
+              } else {
+                if (!thinkingStarted) {
+                  emitData({ type: 'thinking', content: '<think>\n' });
+                  thinkingStarted = true;
+                }
+                emitData({ type: 'thinking', content: part.text || '' });
               }
-              emitData({ type: 'thinking', content: part.text || '' });
             } else if (part.text !== undefined) {
-              if (thinkingStarted) {
+              // 过滤掉空的非thought文本
+              if (part.text.trim() === '') {
+                continue;
+              }
+              if (thinkingStarted && !isGeminiModel) {
                 emitData({ type: 'thinking', content: '\n</think>\n' });
                 thinkingStarted = false;
               }
               emitData({ type: 'text', content: part.text });
+            } else if (part.inlineData) {
+              generatedImages.push({
+                mimeType: part.inlineData.mimeType,
+                data: part.inlineData.data
+              });
+              emitData({
+                type: 'image',
+                image: {
+                  mimeType: part.inlineData.mimeType,
+                  data: part.inlineData.data
+                }
+              });
             } else if (part.functionCall) {
               toolCalls.push({
                 id: part.functionCall.id,
@@ -193,13 +237,15 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
           }
         }
 
-        if (data.response?.candidates?.[0]?.finishReason && toolCalls.length > 0) {
-          if (thinkingStarted) {
+        if (data.response?.candidates?.[0]?.finishReason) {
+          if (thinkingStarted && !isGeminiModel) {
             emitData({ type: 'thinking', content: '\n</think>\n' });
             thinkingStarted = false;
           }
-          emitData({ type: 'tool_calls', tool_calls: toolCalls });
-          toolCalls = [];
+          if (toolCalls.length > 0) {
+            emitData({ type: 'tool_calls', tool_calls: toolCalls });
+            toolCalls = [];
+          }
         }
       } catch (e) {
         logger.warn('解析残余数据失败', { line: jsonStr, error: e?.message || e });

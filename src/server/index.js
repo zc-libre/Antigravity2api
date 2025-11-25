@@ -207,6 +207,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       const id = `chatcmpl-${Date.now()}`;
       const created = Math.floor(Date.now() / 1000);
       let hasToolCall = false;
+      let collectedImages = [];
       
       await generateAssistantResponse(requestBody, req.tokenSource, (data) => {
         if (data.type === 'tool_calls') {
@@ -218,6 +219,8 @@ app.post('/v1/chat/completions', async (req, res) => {
             model,
             choices: [{ index: 0, delta: { tool_calls: data.tool_calls }, finish_reason: null }]
           })}\n\n`);
+        } else if (data.type === 'image') {
+          collectedImages.push(data.image);
         } else {
           res.write(`data: ${JSON.stringify({
             id,
@@ -228,7 +231,21 @@ app.post('/v1/chat/completions', async (req, res) => {
           })}\n\n`);
         }
       });
-      
+
+      // 如果有生成的图像，在结束前以 base64 形式下发
+      if (collectedImages.length > 0) {
+        for (const img of collectedImages) {
+          const imageUrl = `data:${img.mimeType};base64,${img.data}`;
+          res.write(`data: ${JSON.stringify({
+            id,
+            object: 'chat.completion.chunk',
+            created,
+            model,
+            choices: [{ index: 0, delta: { content: `\n![生成的图像](${imageUrl})\n` }, finish_reason: null }]
+          })}\n\n`);
+        }
+      }
+
       res.write(`data: ${JSON.stringify({
         id,
         object: 'chat.completion.chunk',
@@ -250,13 +267,23 @@ app.post('/v1/chat/completions', async (req, res) => {
     } else {
       let fullContent = '';
       let toolCalls = [];
+      let collectedImages = [];
       await generateAssistantResponse(requestBody, req.tokenSource, (data) => {
         if (data.type === 'tool_calls') {
           toolCalls = data.tool_calls;
+        } else if (data.type === 'image') {
+          collectedImages.push(data.image);
         } else {
           fullContent += data.content;
         }
       });
+      if (collectedImages.length > 0) {
+        fullContent += '\n\n';
+        for (const img of collectedImages) {
+          const imageUrl = `data:${img.mimeType};base64,${img.data}`;
+          fullContent += `![生成的图像](${imageUrl})\n`;
+        }
+      }
       
       const message = { role: 'assistant', content: fullContent };
       if (toolCalls.length > 0) {

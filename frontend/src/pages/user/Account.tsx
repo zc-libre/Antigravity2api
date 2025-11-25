@@ -33,15 +33,13 @@ export function UserAccount() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const token = localStorage.getItem('user_token') || ''
-
   useEffect(() => {
     loadProfile()
   }, [])
 
   const loadProfile = async () => {
     try {
-      const res = await userApi.getProfile(token)
+      const res = await userApi.getProfile()
       if (res.success && res.data) {
         setProfile(res.data as UserProfile)
       }
@@ -74,7 +72,7 @@ export function UserAccount() {
     setMessage(null)
 
     try {
-      const res = await userApi.changePassword(token, oldPassword, newPassword)
+      const res = await userApi.changePassword(oldPassword, newPassword)
       if (res.success) {
         setMessage({ type: 'success', text: '密码修改成功' })
         setOldPassword('')

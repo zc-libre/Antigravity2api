@@ -35,6 +35,11 @@ interface Stats {
   idleTime: string
   totalRequests: number
   baseUrl: string
+  // 额外的系统信息
+  nodeVersion: string
+  platform: string
+  pid: number
+  systemMemory: string
 }
 
 export function Dashboard() {
@@ -57,6 +62,10 @@ export function Dashboard() {
     idleTime: '0 秒',
     totalRequests: 0,
     baseUrl: window.location.origin,
+    nodeVersion: '-',
+    platform: '-',
+    pid: 0,
+    systemMemory: '-',
   })
   const [, setLoading] = useState(true)
 
@@ -68,41 +77,51 @@ export function Dashboard() {
 
   const loadStats = async () => {
     try {
-      const [statsRes, statusRes] = await Promise.all([
-        adminApi.getStats(),
+      const [tokenStatsRes, keyStatsRes, statusRes] = await Promise.all([
+        adminApi.getTokenStats(),
+        adminApi.getKeyStats(),
         adminApi.getStatus(),
       ])
 
-      if (statsRes.success && statsRes.data) {
-        const data = statsRes.data as Record<string, unknown>
+      if (tokenStatsRes.success && tokenStatsRes.data) {
+        const data = tokenStatsRes.data as Record<string, unknown>
         setStats(prev => ({
           ...prev,
-          tokenCount: (data.tokens as number) || 0,
-          tokenEnabled: (data.tokensEnabled as number) || 0,
-          tokenDisabled: (data.tokensDisabled as number) || 0,
-          keyCount: (data.keys as number) || 0,
+          tokenCount: (data.total as number) || 0,
+          tokenEnabled: (data.enabled as number) || 0,
+          tokenDisabled: (data.disabled as number) || 0,
+        }))
+      }
+
+      if (keyStatsRes.success && keyStatsRes.data) {
+        const data = keyStatsRes.data as Record<string, unknown>
+        setStats(prev => ({
+          ...prev,
+          keyCount: (data.total as number) || 0,
           keyRequests: (data.totalRequests as number) || 0,
-          todayRequests: (data.todayRequests as number) || 0,
         }))
       }
 
       if (statusRes.success && statusRes.data) {
         const data = statusRes.data as Record<string, unknown>
-        const system = data.system as Record<string, unknown> || {}
-        const rotation = data.rotation as Record<string, unknown> || {}
-        const idle = data.idle as Record<string, unknown> || {}
         
+        // 后端直接返回扁平结构
         setStats(prev => ({
           ...prev,
-          cpu: `${system.cpu || 0}%`,
-          memory: `${system.memory || 0}%`,
-          uptime: formatUptime(system.uptime as number || 0),
-          totalTokens: (rotation.totalTokens as number) || 0,
-          currentIndex: (rotation.currentIndex as number) || 0,
-          rotationRequests: (rotation.requests as number) || 0,
-          idleStatus: (idle.isIdle as boolean) ? '空闲' : '活跃',
-          idleTime: formatIdleTime(idle.idleTime as number || 0),
-          totalRequests: (data.totalRequests as number) || 0,
+          cpu: (data.cpu as string) || '-',
+          memory: (data.memory as string) || '-',
+          uptime: (data.uptime as string) || '-',
+          totalTokens: prev.tokenEnabled, // 使用 token stats 中的数据
+          currentIndex: 0,
+          rotationRequests: (data.requests as number) || 0,
+          idleStatus: (data.idle as string) || '活跃',
+          idleTime: formatIdleTime((data.idleTime as number) || 0),
+          totalRequests: (data.requests as number) || 0,
+          todayRequests: (data.requests as number) || 0,
+          nodeVersion: (data.nodeVersion as string) || '-',
+          platform: (data.platform as string) || '-',
+          pid: (data.pid as number) || 0,
+          systemMemory: (data.systemMemory as string) || '-',
         }))
       }
     } catch (error) {
@@ -110,15 +129,6 @@ export function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const formatUptime = (seconds: number): string => {
-    const days = Math.floor(seconds / 86400)
-    const hours = Math.floor((seconds % 86400) / 3600)
-    const mins = Math.floor((seconds % 3600) / 60)
-    if (days > 0) return `${days}天 ${hours}时`
-    if (hours > 0) return `${hours}时 ${mins}分`
-    return `${mins}分钟`
   }
 
   const formatIdleTime = (seconds: number): string => {
@@ -268,6 +278,36 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 环境信息 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cpu className="h-5 w-5" />
+            环境信息
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="p-3 rounded-lg border-l-4 border-l-violet-500 bg-muted/50">
+              <p className="text-sm text-muted-foreground">Node 版本</p>
+              <p className="font-semibold">{stats.nodeVersion}</p>
+            </div>
+            <div className="p-3 rounded-lg border-l-4 border-l-blue-500 bg-muted/50">
+              <p className="text-sm text-muted-foreground">平台</p>
+              <p className="font-semibold">{stats.platform}</p>
+            </div>
+            <div className="p-3 rounded-lg border-l-4 border-l-green-500 bg-muted/50">
+              <p className="text-sm text-muted-foreground">进程 ID</p>
+              <p className="font-semibold">{stats.pid}</p>
+            </div>
+            <div className="p-3 rounded-lg border-l-4 border-l-amber-500 bg-muted/50">
+              <p className="text-sm text-muted-foreground">系统内存</p>
+              <p className="font-semibold">{stats.systemMemory}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 快速操作和指南 */}
       <div className="grid gap-4 md:grid-cols-2">
