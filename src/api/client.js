@@ -87,10 +87,8 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let thinkingStarted = false;
   let toolCalls = [];
   let generatedImages = [];
-  const isGeminiModel = (requestBody.model || '').startsWith('gemini-');
 
   while (true) {
     const { done, value } = await reader.read();
@@ -118,23 +116,12 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
         if (parts) {
           for (const part of parts) {
             if (part.thought === true) {
-              if (isGeminiModel) {
-                emitData({ type: 'text', content: part.text || '' });
-              } else {
-                if (!thinkingStarted) {
-                  emitData({ type: 'thinking', content: '<think>\n' });
-                  thinkingStarted = true;
-                }
-                emitData({ type: 'thinking', content: part.text || '' });
-              }
+              // 思考内容输出到 reasoning_content 字段
+              emitData({ type: 'thinking', content: part.text || '' });
             } else if (part.text !== undefined) {
               // 过滤掉空的非thought文本
               if (part.text.trim() === '') {
                 continue;
-              }
-              if (thinkingStarted && !isGeminiModel) {
-                emitData({ type: 'thinking', content: '\n</think>\n' });
-                thinkingStarted = false;
               }
               emitData({ type: 'text', content: part.text });
             } else if (part.inlineData) {
@@ -164,10 +151,6 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
 
         // 当遇到 finishReason 时，发送所有收集的工具调用
         if (data.response?.candidates?.[0]?.finishReason) {
-          if (thinkingStarted && !isGeminiModel) {
-            emitData({ type: 'thinking', content: '\n</think>\n' });
-            thinkingStarted = false;
-          }
           if (toolCalls.length > 0) {
             emitData({ type: 'tool_calls', tool_calls: toolCalls });
             toolCalls = [];
@@ -193,23 +176,12 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
         if (parts) {
           for (const part of parts) {
             if (part.thought === true) {
-              if (isGeminiModel) {
-                emitData({ type: 'text', content: part.text || '' });
-              } else {
-                if (!thinkingStarted) {
-                  emitData({ type: 'thinking', content: '<think>\n' });
-                  thinkingStarted = true;
-                }
-                emitData({ type: 'thinking', content: part.text || '' });
-              }
+              // 思考内容输出到 reasoning_content 字段
+              emitData({ type: 'thinking', content: part.text || '' });
             } else if (part.text !== undefined) {
               // 过滤掉空的非thought文本
               if (part.text.trim() === '') {
                 continue;
-              }
-              if (thinkingStarted && !isGeminiModel) {
-                emitData({ type: 'thinking', content: '\n</think>\n' });
-                thinkingStarted = false;
               }
               emitData({ type: 'text', content: part.text });
             } else if (part.inlineData) {
@@ -238,10 +210,6 @@ export async function generateAssistantResponse(requestBody, tokenSource, callba
         }
 
         if (data.response?.candidates?.[0]?.finishReason) {
-          if (thinkingStarted && !isGeminiModel) {
-            emitData({ type: 'thinking', content: '\n</think>\n' });
-            thinkingStarted = false;
-          }
           if (toolCalls.length > 0) {
             emitData({ type: 'tool_calls', tool_calls: toolCalls });
             toolCalls = [];

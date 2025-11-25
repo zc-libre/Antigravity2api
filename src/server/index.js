@@ -204,7 +204,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     
-    const id = `chatcmpl-${Date.now()}`;
+    const id = `chatcmpl-${Date.now()}${Math.random().toString(36).substring(2, 15)}`;
     const created = Math.floor(Date.now() / 1000);
     let hasToolCall = false;
     let collectedImages = [];
@@ -218,17 +218,33 @@ app.post('/v1/chat/completions', async (req, res) => {
             object: 'chat.completion.chunk',
             created,
             model,
-            choices: [{ index: 0, delta: { tool_calls: data.tool_calls }, finish_reason: null }]
+            system_fingerprint: null,
+            choices: [{ index: 0, delta: { tool_calls: data.tool_calls }, logprobs: null, finish_reason: null }],
+            usage: null
           })}\n\n`);
         } else if (data.type === 'image') {
           collectedImages.push(data.image);
-        } else {
+        } else if (data.type === 'thinking') {
+          // 思考内容输出到 reasoning_content 字段
           res.write(`data: ${JSON.stringify({
             id,
             object: 'chat.completion.chunk',
             created,
             model,
-            choices: [{ index: 0, delta: { content: data.content }, finish_reason: null }]
+            system_fingerprint: null,
+            choices: [{ index: 0, delta: { reasoning_content: data.content }, logprobs: null, finish_reason: null }],
+            usage: null
+          })}\n\n`);
+        } else {
+          // 普通文本内容输出到 content 字段
+          res.write(`data: ${JSON.stringify({
+            id,
+            object: 'chat.completion.chunk',
+            created,
+            model,
+            system_fingerprint: null,
+            choices: [{ index: 0, delta: { content: data.content }, logprobs: null, finish_reason: null }],
+            usage: null
           })}\n\n`);
         }
       });
@@ -242,7 +258,9 @@ app.post('/v1/chat/completions', async (req, res) => {
             object: 'chat.completion.chunk',
             created,
             model,
-            choices: [{ index: 0, delta: { content: `\n![生成的图像](${imageUrl})\n` }, finish_reason: null }]
+            system_fingerprint: null,
+            choices: [{ index: 0, delta: { content: `\n![生成的图像](${imageUrl})\n` }, logprobs: null, finish_reason: null }],
+            usage: null
           })}\n\n`);
         }
       }
@@ -252,7 +270,9 @@ app.post('/v1/chat/completions', async (req, res) => {
         object: 'chat.completion.chunk',
         created,
         model,
-        choices: [{ index: 0, delta: {}, finish_reason: hasToolCall ? 'tool_calls' : 'stop' }]
+        system_fingerprint: null,
+        choices: [{ index: 0, delta: {}, logprobs: null, finish_reason: hasToolCall ? 'tool_calls' : 'stop' }],
+        usage: null
       })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
@@ -273,14 +293,18 @@ app.post('/v1/chat/completions', async (req, res) => {
         object: 'chat.completion.chunk',
         created,
         model,
-        choices: [{ index: 0, delta: { content: `\n\n错误: ${error.message}` }, finish_reason: null }]
+        system_fingerprint: null,
+        choices: [{ index: 0, delta: { content: `\n\n错误: ${error.message}` }, logprobs: null, finish_reason: null }],
+        usage: null
       })}\n\n`);
       res.write(`data: ${JSON.stringify({
         id,
         object: 'chat.completion.chunk',
         created,
         model,
-        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+        system_fingerprint: null,
+        choices: [{ index: 0, delta: {}, logprobs: null, finish_reason: 'stop' }],
+        usage: null
       })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
@@ -289,6 +313,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     // 非流式响应：正常错误处理
     try {
       let fullContent = '';
+      let reasoningContent = '';
       let toolCalls = [];
       let collectedImages = [];
       await generateAssistantResponse(requestBody, req.tokenSource, (data) => {
@@ -296,6 +321,9 @@ app.post('/v1/chat/completions', async (req, res) => {
           toolCalls = data.tool_calls;
         } else if (data.type === 'image') {
           collectedImages.push(data.image);
+        } else if (data.type === 'thinking') {
+          // 收集思考内容
+          reasoningContent += data.content;
         } else {
           fullContent += data.content;
         }
@@ -309,20 +337,27 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
       
       const message = { role: 'assistant', content: fullContent };
+      // 如果有思考内容，添加 reasoning_content 字段
+      if (reasoningContent) {
+        message.reasoning_content = reasoningContent;
+      }
       if (toolCalls.length > 0) {
         message.tool_calls = toolCalls;
       }
       
       res.json({
-        id: `chatcmpl-${Date.now()}`,
+        id: `chatcmpl-${Date.now()}${Math.random().toString(36).substring(2, 15)}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
         model,
+        system_fingerprint: null,
         choices: [{
           index: 0,
           message,
+          logprobs: null,
           finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
-        }]
+        }],
+        usage: null
       });
 
       // 记录模型使用（用户 API Key）
