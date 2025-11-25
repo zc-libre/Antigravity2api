@@ -144,71 +144,72 @@ app.get('/v1/models', async (req, res) => {
 
 app.post('/v1/chat/completions', async (req, res) => {
   let { messages, model, stream = true, tools, ...params} = req.body;
-  try {
 
-    if (!messages) {
-      return res.status(400).json({ error: 'messages is required' });
+  // 参数验证错误直接返回 400
+  if (!messages) {
+    return res.status(400).json({ error: 'messages is required' });
+  }
+
+  // 如果是用户 API Key，注入用户的系统提示词并检查模型配额
+  if (req.tokenSource && req.tokenSource.type === 'user') {
+    try {
+      const user = await getUserById(req.tokenSource.userId);
+      if (user && user.systemPrompt) {
+        // 检查是否已经有系统消息
+        const hasSystemMessage = messages.some(msg => msg.role === 'system');
+
+        if (!hasSystemMessage) {
+          // 在消息数组开头添加系统提示词
+          messages = [
+            { role: 'system', content: user.systemPrompt },
+            ...messages
+          ];
+        } else {
+          // 如果已有系统消息，将用户的系统提示词追加到第一个系统消息
+          const systemMsgIndex = messages.findIndex(msg => msg.role === 'system');
+          messages[systemMsgIndex].content = user.systemPrompt + '\n\n' + messages[systemMsgIndex].content;
+        }
+      }
+    } catch (error) {
+      logger.warn(`获取用户系统提示词失败: ${error.message}`);
+      // 继续执行，不影响正常请求
     }
 
-    // 如果是用户 API Key，注入用户的系统提示词并检查模型配额
-    if (req.tokenSource && req.tokenSource.type === 'user') {
-      try {
-        const user = await getUserById(req.tokenSource.userId);
-        if (user && user.systemPrompt) {
-          // 检查是否已经有系统消息
-          const hasSystemMessage = messages.some(msg => msg.role === 'system');
-
-          if (!hasSystemMessage) {
-            // 在消息数组开头添加系统提示词
-            messages = [
-              { role: 'system', content: user.systemPrompt },
-              ...messages
-            ];
-          } else {
-            // 如果已有系统消息，将用户的系统提示词追加到第一个系统消息
-            const systemMsgIndex = messages.findIndex(msg => msg.role === 'system');
-            messages[systemMsgIndex].content = user.systemPrompt + '\n\n' + messages[systemMsgIndex].content;
+    // 检查模型配额
+    try {
+      const quotaCheck = await checkModelQuota(req.tokenSource.userId, model || 'gemini-2.0-flash-exp');
+      if (!quotaCheck.allowed) {
+        logger.warn(`用户 ${req.tokenSource.userId} 模型 ${model} 配额已用尽`);
+        return res.status(429).json({
+          error: {
+            message: quotaCheck.error || `模型 ${model} 今日配额已用尽，剩余: ${quotaCheck.remaining}/${quotaCheck.quota}`,
+            type: 'quota_exceeded',
+            quota: quotaCheck.quota,
+            used: quotaCheck.used,
+            remaining: quotaCheck.remaining
           }
-        }
-      } catch (error) {
-        logger.warn(`获取用户系统提示词失败: ${error.message}`);
-        // 继续执行，不影响正常请求
+        });
       }
-
-      // 检查模型配额
-      try {
-        const quotaCheck = await checkModelQuota(req.tokenSource.userId, model || 'gemini-2.0-flash-exp');
-        if (!quotaCheck.allowed) {
-          logger.warn(`用户 ${req.tokenSource.userId} 模型 ${model} 配额已用尽`);
-          return res.status(429).json({
-            error: {
-              message: quotaCheck.error || `模型 ${model} 今日配额已用尽，剩余: ${quotaCheck.remaining}/${quotaCheck.quota}`,
-              type: 'quota_exceeded',
-              quota: quotaCheck.quota,
-              used: quotaCheck.used,
-              remaining: quotaCheck.remaining
-            }
-          });
-        }
-      } catch (error) {
-        logger.warn(`检查模型配额失败: ${error.message}`);
-        // 继续执行，不影响正常请求
-      }
+    } catch (error) {
+      logger.warn(`检查模型配额失败: ${error.message}`);
+      // 继续执行，不影响正常请求
     }
+  }
 
-    const requestBody = generateRequestBody(messages, model, params, tools);
-    //console.log(JSON.stringify(requestBody,null,2));
+  const requestBody = generateRequestBody(messages, model, params, tools);
+
+  if (stream) {
+    // 流式响应：始终返回 200，错误通过流传递
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
     
-    if (stream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      
-      const id = `chatcmpl-${Date.now()}`;
-      const created = Math.floor(Date.now() / 1000);
-      let hasToolCall = false;
-      let collectedImages = [];
-      
+    const id = `chatcmpl-${Date.now()}`;
+    const created = Math.floor(Date.now() / 1000);
+    let hasToolCall = false;
+    let collectedImages = [];
+
+    try {
       await generateAssistantResponse(requestBody, req.tokenSource, (data) => {
         if (data.type === 'tool_calls') {
           hasToolCall = true;
@@ -264,7 +265,29 @@ app.post('/v1/chat/completions', async (req, res) => {
           logger.warn(`记录模型使用失败: ${error.message}`);
         }
       }
-    } else {
+    } catch (error) {
+      // 流式错误处理：在流中发送错误信息
+      logger.error('生成响应失败:', error.message);
+      res.write(`data: ${JSON.stringify({
+        id,
+        object: 'chat.completion.chunk',
+        created,
+        model,
+        choices: [{ index: 0, delta: { content: `\n\n错误: ${error.message}` }, finish_reason: null }]
+      })}\n\n`);
+      res.write(`data: ${JSON.stringify({
+        id,
+        object: 'chat.completion.chunk',
+        created,
+        model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+      })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
+  } else {
+    // 非流式响应：正常错误处理
+    try {
       let fullContent = '';
       let toolCalls = [];
       let collectedImages = [];
@@ -310,35 +333,11 @@ app.post('/v1/chat/completions', async (req, res) => {
           logger.warn(`记录模型使用失败: ${error.message}`);
         }
       }
-    }
-  } catch (error) {
-    logger.error('生成响应失败:', error.message);
-    if (!res.headersSent) {
-      if (stream) {
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        const id = `chatcmpl-${Date.now()}`;
-        const created = Math.floor(Date.now() / 1000);
-        res.write(`data: ${JSON.stringify({
-          id,
-          object: 'chat.completion.chunk',
-          created,
-          model,
-          choices: [{ index: 0, delta: { content: `错误: ${error.message}` }, finish_reason: null }]
-        })}\n\n`);
-        res.write(`data: ${JSON.stringify({
-          id,
-          object: 'chat.completion.chunk',
-          created,
-          model,
-          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
-        })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-      } else {
-        res.status(500).json({ error: error.message });
-      }
+    } catch (error) {
+      logger.error('生成响应失败:', error.message);
+      const statusCode = error.statusCode || 500;
+      const errorMessage = error.responseText || error.message;
+      res.status(statusCode).json({ error: errorMessage });
     }
   }
 });

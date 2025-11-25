@@ -285,9 +285,10 @@ export async function getAvailableModels(tokenSource) {
 
   const data = await response.json();
   
+  const models = data?.models || {};
   return {
     object: 'list',
-    data: Object.keys(data.models).map(id => ({
+    data: Object.keys(models).map(id => ({
       id,
       object: 'model',
       created: Math.floor(Date.now() / 1000),

@@ -79,8 +79,9 @@ function handleAssistantMessage(message, antigravityMessages, isImageModel = fal
   const hasToolCalls = message.tool_calls && Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
   const hasContent = message.content && (typeof message.content === 'string' ? message.content.trim() !== '' : true);
   
-  // 解析工具调用参数，兼容字符串/对象
-  const antigravityTools = hasToolCalls ? message.tool_calls.map(toolCall => {
+  // 安全处理 tool_calls，防止 undefined.map() 错误
+  const toolCallsArray = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+  const antigravityTools = hasToolCalls ? toolCallsArray.map(toolCall => {
     let argsObj;
     try {
       argsObj = typeof toolCall.function.arguments === 'string'
@@ -241,20 +242,102 @@ function generateGenerationConfig(parameters, enableThinking, actualModelName){
   }
   return generationConfig;
 }
+
+/**
+ * Gemini API 不支持的 JSON Schema 关键字黑名单
+ * 这些关键字会导致 Claude API 返回 "JSON schema is invalid" 错误
+ */
+const UNSUPPORTED_SCHEMA_KEYS = new Set([
+  // 草案/元信息
+  '$schema', '$id', '$defs', 'definitions',
+  // 组合逻辑
+  'allOf', 'anyOf', 'oneOf', 'not', 'if', 'then', 'else',
+  // 正则/模式类
+  'pattern', 'patternProperties', 'propertyNames',
+  // 字符串约束（重点：minLength/maxLength 会导致 tools.10 错误）
+  'minLength', 'maxLength',
+  // 数组约束
+  'minItems', 'maxItems', 'uniqueItems', 'contains',
+  // 数值约束
+  'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf',
+  // 依赖相关
+  'dependentSchemas', 'dependentRequired',
+  // 评估相关
+  'additionalItems', 'unevaluatedItems', 'unevaluatedProperties'
+]);
+
+/**
+ * 规范化 JSON Schema，移除 Gemini 不支持的关键字
+ * 只保留基本的 type/properties/required/items/enum/additionalProperties/description/format/default
+ *
+ * 这个函数解决了 "tools.10.custom.input_schema: JSON schema is invalid" 错误
+ * 该错误是由于 TodoWrite 工具中使用了 minLength 等 Gemini 不支持的约束关键字
+ */
+function normalizeJsonSchema(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+
+  // 处理数组
+  if (Array.isArray(schema)) {
+    return schema.map(item => normalizeJsonSchema(item));
+  }
+
+  // 深拷贝对象
+  const normalized = { ...schema };
+
+  // 1. 删除黑名单中的所有关键字
+  for (const key of Object.keys(normalized)) {
+    if (UNSUPPORTED_SCHEMA_KEYS.has(key)) {
+      delete normalized[key];
+    }
+  }
+
+  // 2. 递归处理保留下来的 schema 相关字段
+  // properties: 对象属性定义
+  if (normalized.properties !== undefined) {
+    if (typeof normalized.properties === 'object' && !Array.isArray(normalized.properties)) {
+      const processed = {};
+      for (const [propKey, propValue] of Object.entries(normalized.properties)) {
+        processed[propKey] = normalizeJsonSchema(propValue);
+      }
+      normalized.properties = processed;
+    }
+  }
+
+  // items: 数组项定义
+  if (normalized.items !== undefined) {
+    normalized.items = normalizeJsonSchema(normalized.items);
+  }
+
+  // additionalProperties: 额外属性定义
+  if (normalized.additionalProperties !== undefined &&
+      typeof normalized.additionalProperties === 'object') {
+    normalized.additionalProperties = normalizeJsonSchema(normalized.additionalProperties);
+  }
+
+  return normalized;
+}
+
 function convertOpenAIToolsToAntigravity(openaiTools){
-  if (!openaiTools || openaiTools.length === 0) return [];
-  return openaiTools.map((tool)=>{
-    delete tool.function.parameters.$schema;
+  // 安全处理 openaiTools，防止 undefined.map() 错误
+  const toolsArray = Array.isArray(openaiTools) ? openaiTools : [];
+  if (toolsArray.length === 0) return [];
+  
+  return toolsArray.map((tool) => {
+    // 规范化 parameters，移除 Draft 7 特征和问题字段
+    const normalizedParams = normalizeJsonSchema(tool.function.parameters);
+    
     return {
       functionDeclarations: [
         {
           name: tool.function.name,
           description: tool.function.description,
-          parameters: tool.function.parameters
+          parameters: normalizedParams
         }
       ]
-    }
-  })
+    };
+  });
 }
 function generateRequestBody(openaiMessages,modelName,parameters,openaiTools){
   const isExplicitThinking = modelName.endsWith('-thinking');
