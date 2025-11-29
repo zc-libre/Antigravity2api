@@ -20,6 +20,9 @@ importers:
       multer:
         specifier: ^2.0.2
         version: 2.0.2
+      readable-stream:
+        specifier: ^4.7.0
+        version: 4.7.0
 
 packages:
 

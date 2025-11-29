@@ -1,0 +1,61 @@
+# 环境变量
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 日志
+*.log
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Token 缓存
+.amazonq_token_cache.json
+
+# 数据库
+accounts.db
+*.db
+*.sqlite
+*.sqlite3
+
+# 测试和工具脚本
+test_*.py
+get_key_token.py
+import_accounts.py
+WARP.md
+# OAuth 临时文件
+gemini_credentials.json
+
+# 临时克隆的项目
+CLIProxyAPI/
+EasyCLI/

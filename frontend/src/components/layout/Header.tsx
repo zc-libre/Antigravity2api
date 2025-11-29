@@ -9,10 +9,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { LogOut, Settings, ExternalLink } from 'lucide-react'
+import { LogOut, Settings, Bell } from 'lucide-react'
 
 interface HeaderProps {
-  type: 'admin' | 'user'
   username?: string
 }
 
@@ -28,53 +27,40 @@ const pageTitles: Record<string, string> = {
   '/admin/logs': '日志查看',
   '/admin/monitor': '系统监控',
   '/admin/settings': '系统设置',
-  '/user': 'API 密钥',
-  '/user/tokens': 'Token 管理',
-  '/user/docs': 'API 使用说明',
-  '/user/test': 'API 测试',
-  '/user/account': '账户设置',
 }
 
-export function Header({ type, username = '管理员' }: HeaderProps) {
+export function Header({ username = '管理员' }: HeaderProps) {
   const location = useLocation()
   const title = pageTitles[location.pathname] || '页面'
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token')
-    localStorage.removeItem('user_token')
-    window.location.href = type === 'admin' ? '/admin/login' : '/login'
+    window.location.href = '/admin/login'
   }
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
-      <div className="flex items-center gap-4">
-        <h1 className="text-xl font-semibold">{title}</h1>
+    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-background/95 backdrop-blur px-6 transition-all">
+      <div className="flex flex-col gap-0.5">
+        <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>Workspace</span>
+          <span>/</span>
+          <span>{title}</span>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
-        {type === 'admin' && (
-          <Link to="/user" target="_blank">
-            <Button variant="outline" size="sm" className="gap-2">
-              <ExternalLink className="h-4 w-4" />
-              用户中心
-            </Button>
-          </Link>
-        )}
+        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
+          <Bell className="h-4 w-4" />
+        </Button>
         
-        {type === 'user' && (
-          <Link to="/admin" target="_blank">
-            <Button variant="outline" size="sm" className="gap-2">
-              <ExternalLink className="h-4 w-4" />
-              管理后台
-            </Button>
-          </Link>
-        )}
+        <div className="h-4 w-px bg-border" />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-9 w-9 rounded-full">
               <Avatar className="h-9 w-9">
-                <AvatarFallback className="bg-primary text-primary-foreground">
+                <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
                   {username.slice(0, 1).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -85,19 +71,19 @@ export function Header({ type, username = '管理员' }: HeaderProps) {
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none">{username}</p>
                 <p className="text-xs leading-none text-muted-foreground">
-                  {type === 'admin' ? '管理员' : '普通用户'}
+                  管理员
                 </p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to={type === 'admin' ? '/admin/settings' : '/user/account'} className="cursor-pointer">
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link to="/admin/settings">
                 <Settings className="mr-2 h-4 w-4" />
                 设置
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer text-destructive" onClick={handleLogout}>
+            <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               退出登录
             </DropdownMenuItem>
@@ -107,4 +93,3 @@ export function Header({ type, username = '管理员' }: HeaderProps) {
     </header>
   )
 }
-

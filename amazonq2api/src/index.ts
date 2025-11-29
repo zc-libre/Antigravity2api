@@ -8,7 +8,7 @@ import { logger } from "./utils/logger.js";
 import { withRetry } from "./utils/retry.js";
 import { registerWithCamoufox, ensureCamoufoxInstalled } from "./browser/camoufox-bridge.js";
 
-interface AutoRegisterOptions {
+export interface AutoRegisterOptions {
     /** 密码（可选，未提供时自动生成） */
     password?: string;
     /** 注册用全名（可选） */
@@ -21,6 +21,8 @@ interface AutoRegisterOptions {
     maxRetries?: number;
     /** 配置（可选） */
     config?: AppConfig;
+    /** 进度回调（可选） */
+    onProgress?: (step: string, percent: number, message?: string) => void;
 }
 
 /**
@@ -43,11 +45,17 @@ export async function autoRegister(options: AutoRegisterOptions = {}): Promise<A
         throw new Error("未配置 GPTMail API，无法使用临时邮箱注册模式");
     }
 
+    const onProgress = options.onProgress ?? (() => {});
+
     const execute = async (): Promise<AccountRecord> => {
         // 第一步：先获取设备授权码（不需要浏览器）
+        onProgress("注册 OIDC 客户端", 5, "正在注册 OIDC 客户端...");
         const { clientId, clientSecret } = await registerClient(config.proxyManager);
+        
+        onProgress("获取设备授权", 10, "正在获取设备授权码...");
         const deviceAuth = await startDeviceAuthorization(clientId, clientSecret, config.proxyManager);
         logger.info("设备授权已获取", { verificationUrl: deviceAuth.verificationUriComplete });
+        onProgress("设备授权成功", 15, `获取验证链接: ${deviceAuth.verificationUriComplete.substring(0, 50)}...`);
 
         // 创建一个可控的 Token 轮询函数
         const startTokenPolling = (timeoutSec: number) => pollForTokens(
@@ -72,19 +80,41 @@ export async function autoRegister(options: AutoRegisterOptions = {}): Promise<A
         });
 
         // 确保 Camoufox 已安装（未安装时自动安装）
+        onProgress("检查浏览器环境", 20, "正在检查 Camoufox 浏览器环境...");
         await ensureCamoufoxInstalled();
+        onProgress("浏览器环境就绪", 25, "Camoufox 浏览器已就绪");
 
         // 使用 Camoufox 注册
         const proxy = config.proxyManager.getNextProxy();
         
+        onProgress("启动浏览器注册", 30, "正在启动浏览器进行自动注册...");
+        
         const result = await registerWithCamoufox(
             deviceAuth.verificationUriComplete,
             {
-                gptmail: config.gptmail,
+                gptmail: config.gptmail!, // 已在上方检查过不为 undefined
                 password: options.password,
                 fullName: options.fullName,
                 headless,
-                proxy: proxy ?? undefined
+                proxy: proxy ?? undefined,
+                onProgress: (step, message) => {
+                    // 浏览器注册过程占 30% - 80%
+                    const browserSteps: Record<string, number> = {
+                        "init": 35,
+                        "navigate": 40,
+                        "create_email": 45,
+                        "fill_email": 50,
+                        "submit_email": 55,
+                        "verify_email": 60,
+                        "fill_profile": 65,
+                        "fill_password": 70,
+                        "submit_register": 75,
+                        "authorize": 80,
+                        "done": 85
+                    };
+                    const percent = browserSteps[step] ?? 50;
+                    onProgress(step, percent, message);
+                }
             }
         );
 
@@ -98,19 +128,24 @@ export async function autoRegister(options: AutoRegisterOptions = {}): Promise<A
         };
 
         logger.info("Camoufox 注册成功", { email: finalCredentials.email });
+        onProgress("浏览器注册完成", 85, `注册邮箱: ${finalCredentials.email}`);
 
         // 等待 Token（如果初始轮询已完成）
+        onProgress("获取访问令牌", 90, "正在等待获取访问令牌...");
         let tokens = await tokenPromise;
         
         // 如果初始轮询超时了，浏览器流程已完成，再次尝试获取 Token
         if (!tokens && tokenError) {
             logger.info("浏览器流程已完成，重新开始 Token 轮询");
+            onProgress("重试获取令牌", 92, "Token 轮询超时，重新尝试获取...");
             tokens = await startTokenPolling(120);  // 再给 2 分钟
         }
         
         if (!tokens) {
             throw new Error("无法获取 Token，授权可能未完成");
         }
+        
+        onProgress("令牌获取成功", 95, "成功获取访问令牌");
 
         const account: AccountRecord = {
             clientId,
@@ -124,8 +159,10 @@ export async function autoRegister(options: AutoRegisterOptions = {}): Promise<A
             awsPassword: finalCredentials.password
         };
 
+        onProgress("保存账号信息", 98, "正在保存账号信息...");
         await fileStore.append(account);
         logger.info("自动注册完成");
+        onProgress("完成", 100, "自动注册流程完成");
         return account;
     };
 
@@ -151,9 +188,11 @@ async function main(): Promise<void> {
     logger.info("结果", account);
 }
 
+// CLI 模式入口
 if (import.meta.url === `file://${process.argv[1]}`) {
     main().catch((error) => {
         logger.error("执行失败", { error: error instanceof Error ? error.message : String(error) });
         process.exitCode = 1;
     });
 }
+

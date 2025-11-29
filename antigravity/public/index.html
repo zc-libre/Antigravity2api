@@ -1583,17 +1583,17 @@
         <div class="endpoint-grid">
           <div class="endpoint-item">
             <div class="endpoint-method">GET</div>
-            <div class="endpoint-path">/v1/models</div>
+            <div class="endpoint-path">/antigravity/api/v1/models</div>
             <div class="endpoint-desc">获取模型列表</div>
           </div>
           <div class="endpoint-item">
             <div class="endpoint-method post">POST</div>
-            <div class="endpoint-path">/v1/chat/completions</div>
+            <div class="endpoint-path">/antigravity/api/v1/chat/completions</div>
             <div class="endpoint-desc">聊天补全接口</div>
           </div>
           <div class="endpoint-item">
             <div class="endpoint-method">GET</div>
-            <div class="endpoint-path">/admin/status</div>
+            <div class="endpoint-path">/antigravity/api/admin/status</div>
             <div class="endpoint-desc">系统状态监控</div>
           </div>
         </div>
@@ -1818,7 +1818,7 @@
 
           <div style="display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center;">
             <label style="font-weight: 500;">API 端点:</label>
-            <input type="text" id="aiApiEndpoint" placeholder="例如: http://localhost:8045/v1/chat/completions" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-family: monospace;">
+            <input type="text" id="aiApiEndpoint" placeholder="例如: http://localhost:8045/antigravity/api/v1/chat/completions" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-family: monospace;">
           </div>
 
           <div style="display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center;">
@@ -1921,13 +1921,13 @@
       </div>
 
       <div class="api-endpoint">
-        <h4>📋 GET /v1/models</h4>
+        <h4>📋 GET /antigravity/api/v1/models</h4>
         <p><strong>功能：</strong>获取所有可用的AI模型列表</p>
         <p><strong>认证：</strong>需要 Bearer Token</p>
 
         <div style="margin: 15px 0;">
           <strong>请求示例：</strong>
-          <div class="code-block">curl http://localhost:8045/v1/models \
+          <div class="code-block">curl http://localhost:8045/antigravity/api/v1/models \
   -H "Authorization: Bearer YOUR_API_KEY"</div>
         </div>
 
@@ -1954,14 +1954,14 @@
       </div>
 
       <div class="api-endpoint">
-        <h4>💬 POST /v1/chat/completions</h4>
+        <h4>💬 POST /antigravity/api/v1/chat/completions</h4>
         <p><strong>功能：</strong>创建聊天对话补全，支持流式和非流式响应</p>
         <p><strong>认证：</strong>需要 Bearer Token</p>
         <p><strong>内容类型：</strong>application/json</p>
 
         <div style="margin: 15px 0;">
           <strong>流式请求示例（推荐）：</strong>
-          <div class="code-block">curl http://localhost:8045/v1/chat/completions \
+          <div class="code-block">curl http://localhost:8045/antigravity/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
@@ -1978,7 +1978,7 @@
 
         <div style="margin: 15px 0;">
           <strong>非流式请求示例：</strong>
-          <div class="code-block">curl http://localhost:8045/v1/chat/completions \
+          <div class="code-block">curl http://localhost:8045/antigravity/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
@@ -2147,7 +2147,7 @@ for chunk in response:
 
         <div style="margin-bottom: 20px;">
           <h4 style="color: #667eea; margin-bottom: 10px;">JavaScript (Fetch API)</h4>
-          <div class="code-block">const response = await fetch('http://localhost:8045/v1/chat/completions', {
+          <div class="code-block">const response = await fetch('http://localhost:8045/antigravity/api/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -2365,7 +2365,7 @@ for await (const chunk of stream) {
   </button>
 
   <script>
-    const API_BASE = window.location.origin;
+    const API_BASE = window.location.origin + '/antigravity/api';
     let chatHistory = [];
     let autoRefreshIntervals = {};
     let adminToken = localStorage.getItem('adminToken') || '';
@@ -3904,7 +3904,7 @@ for await (const chunk of stream) {
     // 加载AI配置
     async function loadAIConfig() {
       try {
-        const res = await fetch('/admin/ai/config', {
+        const res = await fetch(API_BASE + '/admin/ai/config', {
           headers: { 'X-Admin-Session': sessionToken }
         });
         const config = await res.json();
@@ -3939,7 +3939,7 @@ for await (const chunk of stream) {
           systemPrompt: document.getElementById('aiSystemPrompt').value
         };
 
-        const res = await fetch('/admin/ai/config', {
+        const res = await fetch(API_BASE + '/admin/ai/config', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3966,7 +3966,7 @@ for await (const chunk of stream) {
       try {
         showMessage('正在运行AI审核，请稍候...', 'info');
 
-        const res = await fetch('/admin/ai/run', {
+        const res = await fetch(API_BASE + '/admin/ai/run', {
           method: 'POST',
           headers: {
             'X-Admin-Session': sessionToken
@@ -3990,7 +3990,7 @@ for await (const chunk of stream) {
     // 加载AI日志
     async function loadAILogs() {
       try {
-        const res = await fetch('/admin/ai/logs?limit=50', {
+        const res = await fetch(API_BASE + '/admin/ai/logs?limit=50', {
           headers: { 'X-Admin-Session': sessionToken }
         });
         const data = await res.json();
@@ -4040,7 +4040,7 @@ for await (const chunk of stream) {
     // 加载AI统计信息
     async function loadAIStatistics() {
       try {
-        const res = await fetch('/admin/ai/statistics', {
+        const res = await fetch(API_BASE + '/admin/ai/statistics', {
           headers: { 'X-Admin-Session': sessionToken }
         });
         const stats = await res.json();

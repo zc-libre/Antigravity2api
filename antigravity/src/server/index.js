@@ -47,7 +47,7 @@ app.use((err, req, res, next) => {
 // 请求日志中间件
 app.use((req, res, next) => {
   // 记录请求活动，管理空闲状态
-  if (req.path.startsWith('/v1/')) {
+  if (req.path.startsWith('/antigravity/api/v1/')) {
     idleManager.recordActivity();
   }
 
@@ -57,7 +57,7 @@ app.use((req, res, next) => {
     logger.request(req.method, req.path, res.statusCode, duration);
 
     // 记录到管理日志
-    if (req.path.startsWith('/v1/')) {
+    if (req.path.startsWith('/antigravity/api/v1/')) {
       incrementRequestCount();
       addLog('info', `${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
     }
@@ -67,7 +67,7 @@ app.use((req, res, next) => {
 
 // API 密钥验证和频率限制中间件
 app.use(async (req, res, next) => {
-  if (req.path.startsWith('/v1/')) {
+  if (req.path.startsWith('/antigravity/api/v1/')) {
     const apiKey = config.security?.apiKey;
     if (apiKey) {
       const authHeader = req.headers.authorization;
@@ -127,12 +127,12 @@ app.use(async (req, res, next) => {
 });
 
 // 管理路由
-app.use('/admin', adminRoutes);
+app.use('/antigravity/api/admin', adminRoutes);
 
 // Claude API 兼容路由
-app.use('/claude', claudeRoutes);
+app.use('/antigravity/api/claude', claudeRoutes);
 
-app.get('/v1/models', async (req, res) => {
+app.get('/antigravity/api/v1/models', async (req, res) => {
   try {
     const models = await getAvailableModels(req.tokenSource);
     res.json(models);
@@ -142,7 +142,7 @@ app.get('/v1/models', async (req, res) => {
   }
 });
 
-app.post('/v1/chat/completions', async (req, res) => {
+app.post('/antigravity/api/v1/chat/completions', async (req, res) => {
   let { messages, model, stream = true, tools, ...params} = req.body;
   try {
 

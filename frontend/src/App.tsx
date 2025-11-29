@@ -15,13 +15,10 @@ import { Logs } from '@/pages/admin/Logs'
 import { Monitor } from '@/pages/admin/Monitor'
 import { Settings } from '@/pages/admin/Settings'
 
-// User pages
-import { UserLogin } from '@/pages/user/Login'
-import { UserApiKeys } from '@/pages/user/ApiKeys'
-import { UserTokens } from '@/pages/user/Tokens'
-import { UserApiUsage } from '@/pages/user/ApiUsage'
-import { UserTest } from '@/pages/user/Test'
-import { UserAccount } from '@/pages/user/Account'
+// Amazon Q pages
+import { AmazonQDashboard } from '@/pages/amazonq/Dashboard'
+import { AmazonQAccounts } from '@/pages/amazonq/Accounts'
+import { AmazonQTasks } from '@/pages/amazonq/Tasks'
 
 function App() {
   return (
@@ -29,7 +26,7 @@ function App() {
       <Routes>
         {/* Admin routes */}
         <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin" element={<MainLayout type="admin" />}>
+        <Route path="/admin" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="tokens" element={<TokenManage />} />
           <Route path="keys" element={<KeyManage />} />
@@ -43,14 +40,11 @@ function App() {
           <Route path="settings" element={<Settings />} />
         </Route>
 
-        {/* User routes */}
-        <Route path="/login" element={<UserLogin />} />
-        <Route path="/user" element={<MainLayout type="user" />}>
-          <Route index element={<UserApiKeys />} />
-          <Route path="tokens" element={<UserTokens />} />
-          <Route path="docs" element={<UserApiUsage />} />
-          <Route path="test" element={<UserTest />} />
-          <Route path="account" element={<UserAccount />} />
+        {/* Amazon Q routes */}
+        <Route path="/amazonq" element={<MainLayout />}>
+          <Route index element={<AmazonQDashboard />} />
+          <Route path="accounts" element={<AmazonQAccounts />} />
+          <Route path="tasks" element={<AmazonQTasks />} />
         </Route>
 
         {/* Default redirect */}

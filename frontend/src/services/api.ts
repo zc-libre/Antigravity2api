@@ -1,6 +1,6 @@
 // API 服务层
-// 使用 /api 前缀避免与前端路由冲突，Vite 代理会将 /api 前缀去掉后转发到后端
-const API_BASE = '/api'
+// 使用 /antigravity/api 前缀
+const API_BASE = '/antigravity/api'
 
 interface ApiResponse<T = unknown> {
   success?: boolean
@@ -42,6 +42,26 @@ async function request<T>(url: string, options?: RequestInit): Promise<ApiRespon
       ...options,
       headers,
     })
+    
+    // 处理 401 未授权错误，自动跳转到登录页
+    if (response.status === 401) {
+      // 判断是 admin 还是 user 接口
+      if (url.startsWith('/admin')) {
+        localStorage.removeItem('admin_token')
+        // 避免在登录页面时重复跳转
+        if (!window.location.pathname.includes('/admin/login')) {
+          window.location.href = '/admin/login'
+        }
+      } else if (url.startsWith('/user')) {
+        localStorage.removeItem('user_token')
+        // 如果有用户登录页，跳转到用户登录页
+        if (!window.location.pathname.includes('/user/login')) {
+          window.location.href = '/user/login'
+        }
+      }
+      const error = await response.json().catch(() => ({ error: 'Unauthorized' }))
+      return { success: false, error: error.error || error.message || 'Unauthorized' }
+    }
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }))
@@ -268,7 +288,7 @@ export const userApi = {
 // 聊天 API
 export const chatApi = {
   test: (apiKey: string, model: string, message: string) =>
-    fetch('/v1/chat/completions', {
+    fetch('/antigravity/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -282,8 +302,72 @@ export const chatApi = {
     }).then(res => res.json()),
 
   getModels: (apiKey: string) =>
-    fetch('/v1/models', {
+    fetch('/antigravity/api/v1/models', {
       headers: { Authorization: `Bearer ${apiKey}` },
     }).then(res => res.json()),
+}
+
+// Amazon Q API
+const AMAZONQ_API_BASE = '/amazonq'
+
+async function amazonqRequest<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...options?.headers as Record<string, string>,
+    }
+    
+    const response = await fetch(`${AMAZONQ_API_BASE}${url}`, {
+      ...options,
+      headers,
+    })
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }))
+      return { success: false, error: error.error || error.message || 'Request failed' }
+    }
+    
+    const data = await response.json()
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+export const amazonqApi = {
+  // 健康检查
+  getHealth: () => amazonqRequest('/health'),
+
+  // 获取所有任务
+  getTasks: () => amazonqRequest('/api/tasks'),
+
+  // 创建注册任务
+  createTask: (options: {
+    password?: string
+    fullName?: string
+    headless?: boolean
+    label?: string
+    maxRetries?: number
+  }) =>
+    amazonqRequest('/api/register', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    }),
+
+  // 查询任务状态
+  getTaskStatus: (taskId: string) => amazonqRequest(`/api/register/${taskId}`),
+
+  // 获取任务日志
+  getTaskLogs: (taskId: string) => amazonqRequest(`/api/register/${taskId}/logs`),
+
+  // 取消任务
+  cancelTask: (taskId: string) =>
+    amazonqRequest(`/api/register/${taskId}`, { method: 'DELETE' }),
+
+  // 获取所有账号
+  getAccounts: () => amazonqRequest('/api/accounts'),
+
+  // 获取账号详情
+  getAccountDetail: (email: string) => amazonqRequest(`/api/accounts/${encodeURIComponent(email)}`),
 }
 

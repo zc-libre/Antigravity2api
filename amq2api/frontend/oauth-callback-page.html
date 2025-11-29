@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>授权中...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <h2>正在处理授权...</h2>
+        <p id="status">请稍候</p>
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        (function() {
+            const statusEl = document.getElementById('status');
+            const errorEl = document.getElementById('error');
+
+            try {
+                // 从 URL 中提取参数
+                const params = new URLSearchParams(window.location.search);
+                const code = params.get('code');
+                const error = params.get('error');
+                const state = params.get('state');
+
+                if (error) {
+                    // OAuth 授权失败
+                    statusEl.textContent = '授权失败';
+                    errorEl.textContent = `错误: ${error}`;
+                    errorEl.style.display = 'block';
+
+                    // 通知父窗口
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'oauth-error',
+                            error: error
+                        }, window.location.origin);
+                    }
+
+                    // 3秒后关闭窗口
+                    setTimeout(() => window.close(), 3000);
+                    return;
+                }
+
+                if (!code) {
+                    throw new Error('未获取到授权码');
+                }
+
+                statusEl.textContent = '授权成功，正在提交...';
+
+                // 通知父窗口
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'oauth-success',
+                        code: code,
+                        state: state
+                    }, window.location.origin);
+
+                    statusEl.textContent = '授权完成！';
+
+                    // 1秒后关闭窗口
+                    setTimeout(() => window.close(), 1000);
+                } else {
+                    throw new Error('无法与父窗口通信');
+                }
+
+            } catch (err) {
+                statusEl.textContent = '处理失败';
+                errorEl.textContent = err.message;
+                errorEl.style.display = 'block';
+
+                // 通知父窗口
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'oauth-error',
+                        error: err.message
+                    }, window.location.origin);
+                }
+
+                // 3秒后关闭窗口
+                setTimeout(() => window.close(), 3000);
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -11,8 +11,9 @@ export const DEVICE_AUTH_URL = `${OIDC_BASE}/device_authorization`;
 export const TOKEN_URL = `${OIDC_BASE}/token`;
 export const START_URL = "https://view.awsapps.com/start";
 
-export const USER_AGENT = "aws-sdk-rust/1.3.9 os/windows lang/rust/1.87.0";
-export const X_AMZ_USER_AGENT = "aws-sdk-rust/1.3.9 ua/2.1 api/ssooidc/1.88.0 os/windows lang/rust/1.87.0 m/E app/AmazonQ-For-CLI";
+// Token 刷新用的 User-Agent（与 Python 版本保持一致）
+export const USER_AGENT = "aws-sdk-rust/1.3.9 os/macos lang/rust/1.87.0";
+export const X_AMZ_USER_AGENT = "aws-sdk-rust/1.3.9 ua/2.1 api/ssooidc/1.88.0 os/macos lang/rust/1.87.0 m/E app/AmazonQ-For-CLI";
 export const AMZ_SDK_REQUEST = "attempt=1; max=3";
 
 export interface GPTMailConfig {

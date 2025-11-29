@@ -1,0 +1,1129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <title>账号管理控制台</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --panel: #ffffff;
+      --text: #1d1d1f;
+      --muted: #86868b;
+      --accent: #0071e3;
+      --accent-hover: #0077ed;
+      --danger: #ff3b30;
+      --success: #34c759;
+      --warning: #ff9500;
+      --border: #d2d2d7;
+      --shadow: rgba(0,0,0,0.08);
+      --shadow-hover: rgba(0,0,0,0.12);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #000000;
+        --panel: #1c1c1e;
+        --text: #f5f5f7;
+        --muted: #98989d;
+        --border: #38383a;
+        --shadow: rgba(0,0,0,0.3);
+        --shadow-hover: rgba(0,0,0,0.4);
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      line-height: 1.5;
+      padding: 40px 20px;
+    }
+    .container { max-width: 980px; margin: 0 auto; }
+    h1 { font-size: 48px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 8px; }
+    h2 { font-size: 28px; font-weight: 600; margin: 32px 0 16px; }
+    h3 { font-size: 20px; font-weight: 600; margin: 24px 0 12px; }
+    .panel {
+      background: var(--panel);
+      border-radius: 18px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px var(--shadow);
+    }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
+    label { color: var(--muted); font-size: 13px; font-weight: 500; }
+    input, textarea, select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(0,113,227,0.1);
+    }
+    textarea { min-height: 120px; resize: vertical; font-family: "SF Mono", Monaco, monospace; }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: var(--muted); }
+    .btn-secondary:hover { background: #6e6e73; }
+    .btn-danger { background: var(--danger); }
+    .btn-danger:hover { background: #ff453a; }
+    .btn-warning { background: var(--warning); }
+    .btn-warning:hover { background: #ffaa33; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .chip.success { color: var(--success); border-color: var(--success); }
+    .chip.danger { color: var(--danger); border-color: var(--danger); }
+    .chip.amazonq { color: #ff9900; border-color: #ff9900; }
+    .chip.gemini { color: #4285f4; border-color: #4285f4; }
+    .list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+    .card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      transition: all 0.2s;
+    }
+    .card:hover { box-shadow: 0 4px 12px var(--shadow-hover); }
+    .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .card-title { font-size: 17px; font-weight: 600; flex: 1; }
+    .kvs { display: grid; grid-template-columns: 140px 1fr; gap: 8px 16px; font-size: 13px; margin: 12px 0; }
+    .kvs .key { color: var(--muted); }
+    .kvs .value { font-family: "SF Mono", Monaco, monospace; word-break: break-all; }
+    .switch { position: relative; display: inline-block; width: 51px; height: 31px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--border);
+      transition: 0.3s;
+      border-radius: 31px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 27px;
+      width: 27px;
+      left: 2px;
+      bottom: 2px;
+      background: white;
+      transition: 0.3s;
+      border-radius: 50%;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    input:checked + .slider { background: var(--success); }
+    input:checked + .slider:before { transform: translateX(20px); }
+    .divider { height: 1px; background: var(--border); margin: 24px 0; }
+    .mono { font-family: "SF Mono", Monaco, monospace; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>账号管理</h1>
+    <p style="color: var(--muted); margin-bottom: 32px;">管理 Amazon Q 和 Gemini 账号</p>
+
+    <div class="panel">
+      <h2>系统状态</h2>
+      <div class="row">
+        <button onclick="checkHealth()">检查健康状态</button>
+        <div id="health" class="chip">未检测</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>账号列表</h2>
+      <div class="row">
+        <button onclick="loadAccounts()">刷新列表</button>
+        <select id="filter_type" onchange="applyFilters()" style="max-width:150px">
+          <option value="all">全部类型</option>
+          <option value="amazonq">Amazon Q</option>
+          <option value="gemini">Gemini</option>
+        </select>
+        <input id="filter_start_date" type="date" onchange="applyFilters()" placeholder="开始日期" style="max-width:150px" />
+        <input id="filter_end_date" type="date" onchange="applyFilters()" placeholder="结束日期" style="max-width:150px" />
+        <button class="btn-secondary" onclick="clearFilters()">清除筛选</button>
+        <button class="btn-danger" onclick="batchDelete()" id="batch_delete_btn" style="display:none">删除选中</button>
+        <button class="btn-warning" onclick="testSelectedAccounts()" id="test_selected_btn" style="display:none">测试选中</button>
+        <button class="btn-warning" onclick="testAllAccounts()">测试所有账号</button>
+        <input id="test_message" placeholder="测试消息" value="Hello" style="max-width:200px" />
+        <div id="test_status" class="chip" style="display:none"></div>
+      </div>
+      <div id="test_results" style="margin-top:12px"></div>
+      <div class="row" style="margin-top:12px">
+        <label class="switch">
+          <input id="select_all" type="checkbox" onchange="toggleSelectAll()" />
+          <span class="slider"></span>
+        </label>
+        <label style="color: var(--text)">全选</label>
+        <span id="selected_count" style="color: var(--muted); margin-left: 12px;">已选择: 0</span>
+      </div>
+      <div class="list" id="accounts"></div>
+
+      <div class="divider"></div>
+
+      <h3>创建新账号</h3>
+      <div class="row">
+        <div class="field" style="max-width:200px">
+          <label>账号类型</label>
+          <select id="new_type" onchange="toggleAccountFields()">
+            <option value="amazonq">Amazon Q</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>标签</label>
+          <input id="new_label" placeholder="账号标签" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Client ID</label>
+          <input id="new_clientId" />
+        </div>
+        <div class="field">
+          <label>Client Secret</label>
+          <input id="new_clientSecret" type="password" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Refresh Token</label>
+          <input id="new_refreshToken" type="password" />
+        </div>
+        <div class="field">
+          <label>Access Token (可选)</label>
+          <input id="new_accessToken" type="password" />
+        </div>
+      </div>
+      <div id="gemini_fields" style="display:none">
+        <div class="row">
+          <div class="field">
+            <label>Project ID (可选)</label>
+            <input id="new_project" placeholder="Gemini 项目 ID" />
+          </div>
+          <div class="field">
+            <label>API Endpoint (可选)</label>
+            <input id="new_api_endpoint" placeholder="https://daily-cloudcode-pa.sandbox.googleapis.com" />
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="switch">
+          <input id="new_enabled" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+        <label style="color: var(--text)">启用账号</label>
+        <button onclick="createAccount()">创建账号</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>批量导入</h3>
+      <div class="row">
+        <div class="field" style="max-width:200px">
+          <label>导入类型</label>
+          <select id="import_type" onchange="toggleImportFormat()">
+            <option value="full">完整格式</option>
+            <option value="amazonq">Amazon Q 简化</option>
+            <option value="gemini">Gemini 简化</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label id="import_format_label">账号数据（每行格式：type|label|clientId|clientSecret|refreshToken|accessToken|project|api_endpoint）</label>
+        <textarea id="import_data" placeholder="amazonq|我的账号|client_id|client_secret|refresh_token|access_token||"></textarea>
+      </div>
+      <div class="row">
+        <button onclick="importAccounts()">批量导入</button>
+        <button class="btn-secondary" onclick="exportAccounts()">导出所有账号</button>
+        <div id="import_status" class="chip" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// 从 URL 参数或 localStorage 获取管理员密钥
+function getAdminKey() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const keyFromUrl = urlParams.get('key');
+  if (keyFromUrl) {
+    localStorage.setItem('adminKey', keyFromUrl);
+    return keyFromUrl;
+  }
+  return localStorage.getItem('adminKey');
+}
+
+// 创建带认证头的 fetch 请求
+function authFetch(url, options = {}) {
+  const adminKey = getAdminKey();
+  const headers = options.headers || {};
+  if (adminKey) {
+    headers['X-Admin-Key'] = adminKey;
+  }
+  return fetch(url, { ...options, headers });
+}
+
+function toggleAccountFields() {
+  const type = document.getElementById('new_type').value;
+  document.getElementById('gemini_fields').style.display = type === 'gemini' ? 'block' : 'none';
+}
+
+function toggleImportFormat() {
+  const type = document.getElementById('import_type').value;
+  const label = document.getElementById('import_format_label');
+  const textarea = document.getElementById('import_data');
+
+  if (type === 'amazonq') {
+    label.textContent = '账号数据（每行格式：email|password|clientId|clientSecret|refreshToken|accessToken）';
+    textarea.placeholder = 'user@example.com|password|client_id|client_secret|refresh_token|access_token';
+  } else if (type === 'gemini') {
+    label.textContent = '账号数据（每行格式：label|clientId|clientSecret|refreshToken|accessToken|project|api_endpoint）';
+    textarea.placeholder = '我的账号|client_id|client_secret|refresh_token|access_token|project_id|api_endpoint';
+  } else {
+    label.textContent = '账号数据（每行格式：type|label|clientId|clientSecret|refreshToken|accessToken|project|api_endpoint）';
+    textarea.placeholder = 'amazonq|我的账号|client_id|client_secret|refresh_token|access_token||';
+  }
+}
+
+function setHealth(text, ok=true) {
+  const el = document.getElementById('health');
+  el.textContent = text;
+  el.className = ok ? 'chip success' : 'chip danger';
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch('/health');
+    const j = await r.json();
+    if (j && j.status === 'healthy') {
+      setHealth(`健康 (${j.enabled_accounts} 个启用账号)`, true);
+    } else {
+      setHealth('不健康', false);
+    }
+  } catch(e) {
+    setHealth('错误', false);
+  }
+}
+
+let allAccounts = [];
+let selectedIds = new Set();
+
+function renderAccounts(list) {
+  const root = document.getElementById('accounts');
+  root.innerHTML = '';
+  if (!Array.isArray(list) || list.length === 0) {
+    root.innerHTML = '<p style="color: var(--muted)">暂无账号</p>';
+    return;
+  }
+  for (const acc of list) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+
+    const selectWrap = document.createElement('label');
+    selectWrap.className = 'switch';
+    selectWrap.style.width = '31px';
+    selectWrap.style.height = '31px';
+    const selectChk = document.createElement('input');
+    selectChk.type = 'checkbox';
+    selectChk.checked = selectedIds.has(acc.id);
+    selectChk.onchange = () => {
+      if (selectChk.checked) {
+        selectedIds.add(acc.id);
+      } else {
+        selectedIds.delete(acc.id);
+      }
+      updateSelectedCount();
+    };
+    const selectSlider = document.createElement('span');
+    selectSlider.className = 'slider';
+    selectWrap.appendChild(selectChk);
+    selectWrap.appendChild(selectSlider);
+
+    const title = document.createElement('div');
+    title.className = 'card-title';
+    title.textContent = acc.label || '(无标签)';
+
+    const typeChip = document.createElement('span');
+    typeChip.className = `chip ${acc.type || 'amazonq'}`;
+    typeChip.textContent = acc.type === 'gemini' ? 'Gemini' : 'Amazon Q';
+
+    const idChip = document.createElement('span');
+    idChip.className = 'chip mono';
+    idChip.textContent = acc.id.substring(0, 8);
+
+    const toggleWrap = document.createElement('label');
+    toggleWrap.className = 'switch';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = !!acc.enabled;
+    chk.onchange = async () => {
+      try {
+        await updateAccount(acc.id, { enabled: chk.checked });
+      } catch(e) {
+        chk.checked = !chk.checked;
+      }
+    };
+    const slider = document.createElement('span');
+    slider.className = 'slider';
+    toggleWrap.appendChild(chk);
+    toggleWrap.appendChild(slider);
+
+    header.appendChild(selectWrap);
+    header.appendChild(title);
+    header.appendChild(typeChip);
+    header.appendChild(idChip);
+    header.appendChild(toggleWrap);
+    card.appendChild(header);
+
+    const meta = document.createElement('div');
+    meta.className = 'kvs';
+    function row(k, v) {
+      const kEl = document.createElement('div');
+      kEl.className = 'key';
+      kEl.textContent = k;
+      const vEl = document.createElement('div');
+      vEl.className = 'value';
+      vEl.textContent = v ?? '';
+      meta.appendChild(kEl);
+      meta.appendChild(vEl);
+    }
+
+    const other = acc.other || {};
+    if (other.suspended) {
+      row('状态', '⚠️ 已被封禁');
+      row('封禁时间', other.suspended_at || 'N/A');
+    }
+    row('创建时间', acc.created_at || 'N/A');
+    row('刷新状态', acc.last_refresh_status || 'never');
+    row('刷新时间', acc.last_refresh_time || 'N/A');
+    row('Client ID', acc.clientId);
+    if (acc.type === 'gemini' && other.project) {
+      row('Project ID', other.project);
+    }
+    card.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'row';
+    actions.style.marginTop = '16px';
+
+    const testBtn = document.createElement('button');
+    testBtn.className = 'btn-secondary';
+    testBtn.textContent = '测试';
+    testBtn.onclick = () => testSingleAccount(acc.id);
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn-warning';
+    refreshBtn.textContent = '刷新Token';
+    refreshBtn.onclick = () => refreshAccount(acc.id);
+
+    actions.appendChild(testBtn);
+    actions.appendChild(refreshBtn);
+
+    if (acc.type === 'gemini') {
+      const quotaBtn = document.createElement('button');
+      quotaBtn.className = 'btn-secondary';
+      quotaBtn.textContent = '查看配额';
+      quotaBtn.onclick = () => viewQuota(acc.id);
+      actions.appendChild(quotaBtn);
+    }
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn-secondary';
+    editBtn.textContent = '编辑';
+    editBtn.onclick = () => editAccount(acc);
+    actions.appendChild(editBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-danger';
+    delBtn.textContent = '删除';
+    delBtn.onclick = () => deleteAccount(acc.id);
+
+    actions.appendChild(delBtn);
+    card.appendChild(actions);
+
+    root.appendChild(card);
+  }
+}
+
+async function loadAccounts() {
+  try {
+    const r = await authFetch('/v2/accounts');
+    allAccounts = await r.json();
+    applyFilters();
+  } catch(e) {
+    alert('加载失败：' + e);
+  }
+}
+
+function applyFilters() {
+  let filtered = [...allAccounts];
+
+  const filterType = document.getElementById('filter_type').value;
+  if (filterType !== 'all') {
+    filtered = filtered.filter(acc => (acc.type || 'amazonq') === filterType);
+  }
+
+  const startDate = document.getElementById('filter_start_date').value;
+  const endDate = document.getElementById('filter_end_date').value;
+
+  if (startDate) {
+    filtered = filtered.filter(acc => acc.created_at >= startDate);
+  }
+
+  if (endDate) {
+    const endDateTime = endDate + 'T23:59:59';
+    filtered = filtered.filter(acc => acc.created_at <= endDateTime);
+  }
+
+  renderAccounts(filtered);
+}
+
+function clearFilters() {
+  document.getElementById('filter_type').value = 'all';
+  document.getElementById('filter_start_date').value = '';
+  document.getElementById('filter_end_date').value = '';
+  applyFilters();
+}
+
+function updateSelectedCount() {
+  const count = selectedIds.size;
+  document.getElementById('selected_count').textContent = `已选择: ${count}`;
+  document.getElementById('batch_delete_btn').style.display = count > 0 ? 'inline-block' : 'none';
+  document.getElementById('test_selected_btn').style.display = count > 0 ? 'inline-block' : 'none';
+}
+
+function toggleSelectAll() {
+  const selectAll = document.getElementById('select_all').checked;
+  const root = document.getElementById('accounts');
+  const cards = root.querySelectorAll('.card');
+
+  if (selectAll) {
+    cards.forEach((card, idx) => {
+      const acc = allAccounts.filter(a => {
+        const filterType = document.getElementById('filter_type').value;
+        const startDate = document.getElementById('filter_start_date').value;
+        const endDate = document.getElementById('filter_end_date').value;
+
+        if (filterType !== 'all' && (a.type || 'amazonq') !== filterType) return false;
+        if (startDate && a.created_at < startDate) return false;
+        if (endDate && a.created_at > endDate + 'T23:59:59') return false;
+        return true;
+      })[idx];
+
+      if (acc) selectedIds.add(acc.id);
+    });
+  } else {
+    selectedIds.clear();
+  }
+
+  applyFilters();
+  updateSelectedCount();
+}
+
+async function batchDelete() {
+  if (selectedIds.size === 0) {
+    alert('请先选择要删除的账号');
+    return;
+  }
+
+  if (!confirm(`确认删除选中的 ${selectedIds.size} 个账号？`)) return;
+
+  let success = 0, failed = 0;
+  const ids = Array.from(selectedIds);
+
+  for (const id of ids) {
+    try {
+      const r = await authFetch('/v2/accounts/' + encodeURIComponent(id), { method: 'DELETE' });
+      if (r.ok) {
+        success++;
+      } else {
+        failed++;
+      }
+    } catch(e) {
+      failed++;
+    }
+  }
+
+  selectedIds.clear();
+  document.getElementById('select_all').checked = false;
+  updateSelectedCount();
+
+  alert(`删除完成: ${success} 成功, ${failed} 失败`);
+  await loadAccounts();
+}
+
+async function createAccount() {
+  const type = document.getElementById('new_type').value;
+  const other = {};
+  if (type === 'gemini') {
+    const project = document.getElementById('new_project').value.trim();
+    const api_endpoint = document.getElementById('new_api_endpoint').value.trim();
+    if (project) other.project = project;
+    if (api_endpoint) other.api_endpoint = api_endpoint;
+  }
+
+  const body = {
+    type,
+    label: document.getElementById('new_label').value.trim() || null,
+    clientId: document.getElementById('new_clientId').value.trim(),
+    clientSecret: document.getElementById('new_clientSecret').value.trim(),
+    refreshToken: document.getElementById('new_refreshToken').value.trim() || null,
+    accessToken: document.getElementById('new_accessToken').value.trim() || null,
+    other: Object.keys(other).length > 0 ? other : null,
+    enabled: document.getElementById('new_enabled').checked
+  };
+
+  try {
+    const r = await authFetch('/v2/accounts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await loadAccounts();
+    // 清空表单
+    document.getElementById('new_label').value = '';
+    document.getElementById('new_clientId').value = '';
+    document.getElementById('new_clientSecret').value = '';
+    document.getElementById('new_refreshToken').value = '';
+    document.getElementById('new_accessToken').value = '';
+    document.getElementById('new_project').value = '';
+    document.getElementById('new_api_endpoint').value = '';
+  } catch(e) {
+    alert('创建失败：' + e);
+  }
+}
+
+async function deleteAccount(id) {
+  if (!confirm('确认删除该账号？')) return;
+  try {
+    const r = await authFetch('/v2/accounts/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!r.ok) throw new Error(await r.text());
+    await loadAccounts();
+  } catch(e) {
+    alert('删除失败：' + e);
+  }
+}
+
+async function updateAccount(id, patch) {
+  try {
+    const r = await authFetch('/v2/accounts/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await loadAccounts();
+  } catch(e) {
+    alert('更新失败：' + e);
+  }
+}
+
+async function refreshAccount(id) {
+  try {
+    const r = await authFetch('/v2/accounts/' + encodeURIComponent(id) + '/refresh', { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    await loadAccounts();
+  } catch(e) {
+    alert('刷新失败：' + e);
+  }
+}
+
+async function editAccount(acc) {
+  const other = acc.other || {};
+  let html = '<div style="padding:20px;max-height:70vh;overflow-y:auto">';
+  html += '<h3 style="margin-top:0">编辑账号</h3>';
+  html += '<div style="display:flex;flex-direction:column;gap:12px">';
+  html += `<div><label style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">标签</label><input id="edit_label" value="${acc.label || ''}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>`;
+  html += `<div><label style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">Client ID</label><input id="edit_clientId" value="${acc.clientId}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>`;
+  html += `<div><label style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">Client Secret</label><input id="edit_clientSecret" type="password" value="${acc.clientSecret}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>`;
+  html += `<div><label style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">Refresh Token</label><input id="edit_refreshToken" type="password" value="${acc.refreshToken || ''}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>`;
+  if (acc.type === 'gemini') {
+    html += `<div><label style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">Project ID</label><input id="edit_project" value="${other.project || ''}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>`;
+    html += `<div><label style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">API Endpoint</label><input id="edit_api_endpoint" value="${other.api_endpoint || ''}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)"></div>`;
+  }
+  html += '</div></div>';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000';
+  modal.innerHTML = `<div style="background:var(--panel);border-radius:16px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">${html}<div style="padding:16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border)"><button onclick="this.closest('div[style*=fixed]').remove()" style="padding:8px 16px;border-radius:8px;border:none;background:var(--muted);color:white;cursor:pointer">取消</button><button id="save_edit" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:white;cursor:pointer">保存</button></div></div>`;
+  document.body.appendChild(modal);
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+  document.getElementById('save_edit').onclick = async () => {
+    try {
+      const patch = {
+        label: document.getElementById('edit_label').value.trim() || null,
+        clientId: document.getElementById('edit_clientId').value.trim(),
+        clientSecret: document.getElementById('edit_clientSecret').value.trim(),
+        refreshToken: document.getElementById('edit_refreshToken').value.trim() || null
+      };
+
+      if (acc.type === 'gemini') {
+        const newOther = { ...other };
+        const project = document.getElementById('edit_project').value.trim();
+        const api_endpoint = document.getElementById('edit_api_endpoint').value.trim();
+
+        if (project) {
+          newOther.project = project;
+        } else {
+          delete newOther.project;
+        }
+
+        if (api_endpoint) {
+          newOther.api_endpoint = api_endpoint;
+        } else {
+          delete newOther.api_endpoint;
+        }
+
+        patch.other = newOther;
+      }
+
+      await updateAccount(acc.id, patch);
+      modal.remove();
+    } catch(e) {
+      alert('保存失败：' + e.message);
+    }
+  };
+}
+
+async function viewQuota(id) {
+  try {
+    const r = await authFetch(`/v2/accounts/${id}/quota`);
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+
+    let html = '<div style="max-height:500px;overflow-y:auto;padding:16px;background:var(--bg);border-radius:12px">';
+    html += '<h3 style="margin-top:0">配额信息</h3>';
+
+    if (data.models) {
+      for (const [modelId, model] of Object.entries(data.models)) {
+        const quota = model.quotaInfo || {};
+        const remaining = (quota.remainingFraction * 100).toFixed(1);
+        const resetTime = quota.resetTime ? new Date(quota.resetTime).toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai'}) : 'N/A';
+
+        html += `<div style="margin-bottom:16px;padding:12px;background:var(--panel);border-radius:8px">`;
+        html += `<div style="font-weight:600;margin-bottom:8px">${model.displayName || modelId}</div>`;
+        html += `<div style="font-size:14px;color:var(--muted)">剩余配额: <span style="color:${remaining > 20 ? 'var(--success)' : 'var(--danger)'}; font-weight:600">${remaining}%</span></div>`;
+        html += `<div style="font-size:14px;color:var(--muted)">重置时间: ${resetTime}</div>`;
+        if (model.maxTokens) html += `<div style="font-size:14px;color:var(--muted)">最大Token: ${model.maxTokens.toLocaleString()}</div>`;
+        html += `</div>`;
+      }
+    }
+
+    html += '</div>';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000';
+    modal.innerHTML = `<div style="background:var(--panel);border-radius:16px;max-width:600px;width:90%;max-height:80vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3)">${html}<div style="padding:16px;text-align:right"><button onclick="this.closest('div[style*=fixed]').remove()" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:white;cursor:pointer">关闭</button></div></div>`;
+    document.body.appendChild(modal);
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  } catch(e) {
+    alert('获取配额失败：' + e.message);
+  }
+}
+
+function setImportStatus(text, ok=true) {
+  const el = document.getElementById('import_status');
+  el.textContent = text;
+  el.className = ok ? 'chip success' : 'chip danger';
+  el.style.display = 'inline-flex';
+}
+
+async function importAccounts() {
+  const data = document.getElementById('import_data').value.trim();
+  if (!data) {
+    alert('请输入账号数据');
+    return;
+  }
+
+  const lines = data.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+  if (lines.length === 0) {
+    alert('没有有效的账号数据');
+    return;
+  }
+
+  const importType = document.getElementById('import_type').value;
+  setImportStatus(`准备导入 ${lines.length} 个账号...`, true);
+
+  let success = 0, failed = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const parts = line.split('|').map(p => p.trim());
+
+    let type, label, clientId, clientSecret, refreshToken, accessToken, project, api_endpoint;
+
+    if (importType === 'amazonq') {
+      if (parts.length < 6) {
+        console.error(`第 ${i+1} 行格式错误: 期望6个字段，实际${parts.length}个`, line);
+        setImportStatus(`第 ${i+1} 行格式错误 (${parts.length}字段)`, false);
+        failed++;
+        continue;
+      }
+      // email|password|clientId|clientSecret|refreshToken|accessToken
+      const [email, password, ...rest] = parts;
+      [clientId, clientSecret, refreshToken, accessToken] = rest;
+      label = email; // 使用 email 作为 label
+      type = 'amazonq';
+    } else if (importType === 'gemini') {
+      if (parts.length < 5) {
+        setImportStatus(`第 ${i+1} 行格式错误`, false);
+        failed++;
+        continue;
+      }
+      [label, clientId, clientSecret, refreshToken, accessToken, project, api_endpoint] = parts;
+      type = 'gemini';
+    } else {
+      if (parts.length < 6) {
+        setImportStatus(`第 ${i+1} 行格式错误`, false);
+        failed++;
+        continue;
+      }
+      [type, label, clientId, clientSecret, refreshToken, accessToken, project, api_endpoint] = parts;
+    }
+
+    const other = {};
+    if (project) other.project = project;
+    if (api_endpoint) other.api_endpoint = api_endpoint;
+
+    try {
+      const r = await authFetch('/v2/accounts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          type: type || 'amazonq',
+          label,
+          clientId,
+          clientSecret,
+          refreshToken: refreshToken || null,
+          accessToken: accessToken || null,
+          other: Object.keys(other).length > 0 ? other : null,
+          enabled: true
+        })
+      });
+
+      if (r.ok) {
+        success++;
+        setImportStatus(`导入中... ${success}/${lines.length}`, true);
+      } else {
+        const errorText = await r.text();
+        console.error(`第 ${i+1} 行导入失败:`, errorText);
+        failed++;
+        setImportStatus(`导入中... ${success} 成功, ${failed} 失败`, false);
+      }
+    } catch(e) {
+      console.error(`第 ${i+1} 行导入异常:`, e);
+      failed++;
+      setImportStatus(`导入中... ${success} 成功, ${failed} 失败`, false);
+    }
+  }
+
+  setImportStatus(`完成: ${success} 成功, ${failed} 失败`, failed === 0);
+  await loadAccounts();
+  if (failed === 0) document.getElementById('import_data').value = '';
+}
+
+function setTestStatus(text, ok=true) {
+  const el = document.getElementById('test_status');
+  el.textContent = text;
+  el.className = ok ? 'chip success' : 'chip danger';
+  el.style.display = 'inline-flex';
+}
+
+async function exportAccounts() {
+  try {
+    const r = await authFetch('/v2/accounts');
+    const accounts = await r.json();
+    if (accounts.length === 0) {
+      alert('没有账号可导出');
+      return;
+    }
+
+    const lines = accounts.map(acc => {
+      const other = acc.other || {};
+      return `${acc.type || 'amazonq'}|${acc.label || ''}|${acc.clientId}|${acc.clientSecret}|${acc.refreshToken || ''}|${acc.accessToken || ''}|${other.project || ''}|${other.api_endpoint || ''}`;
+    });
+
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `accounts_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('导出失败：' + e);
+  }
+}
+
+async function testSingleAccount(accountId) {
+  const msg = document.getElementById('test_message').value.trim() || 'Hello';
+  const accounts = await (await authFetch('/v2/accounts')).json();
+  const acc = accounts.find(a => a.id === accountId);
+
+  if (!acc) {
+    alert('账号不存在');
+    return;
+  }
+
+  setTestStatus(`测试 ${acc.label}...`, true);
+  document.getElementById('test_results').innerHTML = '';
+
+  try {
+    const endpoint = acc.type === 'gemini' ? '/v1/gemini/messages' : '/v1/messages';
+    const headers = {
+      'content-type': 'application/json',
+      'X-Account-ID': accountId
+    };
+    const adminKey = getAdminKey();
+    if (adminKey) headers['x-api-key'] = adminKey;
+
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: acc.type === 'gemini' ? 'gemini-3-pro' : 'claude-sonnet-4',
+        max_tokens: 50,
+        messages: [{ role: 'user', content: msg }]
+      })
+    });
+
+    if (!r.ok) {
+      const errText = await r.text();
+      setTestStatus(`测试失败`, false);
+      document.getElementById('test_results').innerHTML = `<div class="card"><div style="color:var(--danger)">✗ ${acc.label}</div><div style="font-size:12px;margin-top:8px">${errText}</div></div>`;
+      return;
+    }
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const json = JSON.parse(data);
+            if (json.type === 'content_block_delta' && json.delta?.text) {
+              text += json.delta.text;
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
+    setTestStatus(`测试成功`, true);
+    document.getElementById('test_results').innerHTML = `<div class="card"><div style="color:var(--success)">✓ ${acc.label}</div><div class="mono" style="font-size:12px;margin-top:8px">${text}</div></div>`;
+  } catch(e) {
+    setTestStatus(`测试失败`, false);
+    document.getElementById('test_results').innerHTML = `<div class="card"><div style="color:var(--danger)">✗ ${acc.label}</div><div style="font-size:12px;margin-top:8px">${e}</div></div>`;
+  }
+}
+
+async function testSelectedAccounts() {
+  if (selectedIds.size === 0) {
+    alert('请先选择要测试的账号');
+    return;
+  }
+
+  const msg = document.getElementById('test_message').value.trim() || 'Hello';
+  const accounts = await (await authFetch('/v2/accounts')).json();
+  const toTest = accounts.filter(a => selectedIds.has(a.id));
+
+  setTestStatus(`测试 ${toTest.length} 个账号...`, true);
+  document.getElementById('test_results').innerHTML = '';
+
+  let success = 0, failed = 0;
+  const results = [];
+
+  for (const acc of toTest) {
+    try {
+      const endpoint = acc.type === 'gemini' ? '/v1/gemini/messages' : '/v1/messages';
+      const headers = {
+        'content-type': 'application/json',
+        'X-Account-ID': acc.id
+      };
+      const adminKey = getAdminKey();
+      if (adminKey) headers['x-api-key'] = adminKey;
+
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: acc.type === 'gemini' ? 'gemini-3-pro' : 'claude-sonnet-4',
+          max_tokens: 50,
+          messages: [{ role: 'user', content: msg }]
+        })
+      });
+
+      if (!r.ok) {
+        failed++;
+        results.push(`<div class="card"><div style="color:var(--danger)">✗ ${acc.label}</div><div style="font-size:12px;margin-top:8px">${await r.text()}</div></div>`);
+        setTestStatus(`测试中... ${success+failed}/${toTest.length}`, true);
+        continue;
+      }
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            try {
+              const json = JSON.parse(data);
+              if (json.type === 'content_block_delta' && json.delta?.text) {
+                text += json.delta.text;
+              }
+            } catch(e) {}
+          }
+        }
+      }
+
+      success++;
+      results.push(`<div class="card"><div style="color:var(--success)">✓ ${acc.label}</div><div class="mono" style="font-size:12px;margin-top:8px">${text.substring(0,100)}${text.length > 100 ? '...' : ''}</div></div>`);
+      setTestStatus(`测试中... ${success+failed}/${toTest.length}`, true);
+    } catch(e) {
+      failed++;
+      results.push(`<div class="card"><div style="color:var(--danger)">✗ ${acc.label}</div><div style="font-size:12px;margin-top:8px">${e}</div></div>`);
+    }
+  }
+
+  setTestStatus(`完成: ${success} 成功, ${failed} 失败`, failed === 0);
+  document.getElementById('test_results').innerHTML = results.join('');
+}
+
+async function testAllAccounts() {
+  const msg = document.getElementById('test_message').value.trim() || 'Hello';
+  const accounts = await (await authFetch('/v2/accounts')).json();
+  const enabled = accounts.filter(a => a.enabled);
+
+  if (enabled.length === 0) {
+    alert('没有启用的账号');
+    return;
+  }
+
+  setTestStatus(`测试 ${enabled.length} 个账号...`, true);
+  document.getElementById('test_results').innerHTML = '';
+
+  let success = 0, failed = 0;
+  const results = [];
+
+  for (const acc of enabled) {
+    try {
+      const endpoint = acc.type === 'gemini' ? '/v1/gemini/messages' : '/v1/messages';
+      const headers = {
+        'content-type': 'application/json',
+        'X-Account-ID': acc.id
+      };
+      const adminKey = getAdminKey();
+      if (adminKey) headers['x-api-key'] = adminKey;
+
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: acc.type === 'gemini' ? 'gemini-3-pro' : 'claude-sonnet-4',
+          max_tokens: 50,
+          messages: [{ role: 'user', content: msg }]
+        })
+      });
+
+      if (!r.ok) {
+        failed++;
+        results.push(`<div class="card"><div style="color:var(--danger)">✗ ${acc.label}</div><div style="font-size:12px;margin-top:8px">${await r.text()}</div></div>`);
+        setTestStatus(`测试中... ${success+failed}/${enabled.length}`, true);
+        continue;
+      }
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            try {
+              const json = JSON.parse(data);
+              if (json.type === 'content_block_delta' && json.delta?.text) {
+                text += json.delta.text;
+              }
+            } catch(e) {}
+          }
+        }
+      }
+
+      success++;
+      results.push(`<div class="card"><div style="color:var(--success)">✓ ${acc.label}</div><div class="mono" style="font-size:12px;margin-top:8px">${text.substring(0,100)}${text.length > 100 ? '...' : ''}</div></div>`);
+      setTestStatus(`测试中... ${success+failed}/${enabled.length}`, true);
+    } catch(e) {
+      failed++;
+      results.push(`<div class="card"><div style="color:var(--danger)">✗ ${acc.label}</div><div style="font-size:12px;margin-top:8px">${e}</div></div>`);
+    }
+  }
+
+  setTestStatus(`完成: ${success} 成功, ${failed} 失败`, failed === 0);
+  document.getElementById('test_results').innerHTML = results.join('');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadAccounts();
+});
+</script>
+</body>
+</html>

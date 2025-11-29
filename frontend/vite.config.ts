@@ -13,14 +13,25 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // API 代理配置 - 使用 /api 前缀避免与前端路由冲突
-      '/api': {
+      // API 代理配置 - 使用 /antigravity/api 前缀
+      '/antigravity/api': {
         target: 'http://localhost:8045',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''), // 去掉 /api 前缀
       },
-      // Claude API 代理
-      '/v1': {
+      // Amazon Q API 代理 - 使用 /amazonq/api 前缀
+      '/amazonq/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/amazonq\/api/, '/api'),
+      },
+      // Amazon Q 健康检查代理
+      '/amazonq/health': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/amazonq\/health/, '/health'),
+      },
+      // 上传文件代理
+      '/uploads': {
         target: 'http://localhost:8045',
         changeOrigin: true,
       },

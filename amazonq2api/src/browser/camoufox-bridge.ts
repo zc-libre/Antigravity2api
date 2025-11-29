@@ -29,6 +29,8 @@ export interface CamoufoxRegistrationOptions extends CamoufoxOptions {
     password?: string;
     /** 显示名称 */
     fullName?: string;
+    /** 进度回调（可选） */
+    onProgress?: (step: string, message: string) => void;
 }
 
 export interface CamoufoxResult {
@@ -53,7 +55,7 @@ export async function registerWithCamoufox(
     const defaultPythonPath = path.join(camoufoxDir, ".venv/bin/python");
     
     const pythonPath = options.pythonPath ?? defaultPythonPath;
-    const timeoutMs = options.timeoutMs ?? 300_000; // 注册流程需要 5 分钟
+    const timeoutMs = options.timeoutMs ?? 600_000; // 注册流程需要 10 分钟（包含等待邮件、重试等）
     
     const args = [
         scriptPath,
@@ -116,6 +118,14 @@ export async function registerWithCamoufox(
                 const trimmed = line.trim();
                 if (trimmed && !trimmed.startsWith("{")) {
                     logger.info("[Camoufox]", { output: trimmed });
+                    
+                    // 解析进度消息（格式: [PROGRESS] step: message）
+                    if (options.onProgress && trimmed.startsWith("[PROGRESS]")) {
+                        const match = trimmed.match(/\[PROGRESS\]\s*(\w+):\s*(.*)/);
+                        if (match) {
+                            options.onProgress(match[1], match[2]);
+                        }
+                    }
                 }
             }
         });

@@ -203,7 +203,7 @@ router.get('/oauth-callback', async (req, res) => {
     // 交换授权码获取访问令牌
     const clientId = config.oauth.clientId;
     const clientSecret = config.oauth.clientSecret;
-    const redirectUri = `${req.protocol}://${req.get('host')}/admin/oauth-callback`;
+    const redirectUri = `${req.protocol}://${req.get('host')}/antigravity/api/admin/oauth-callback`;
 
     await addLog('info', `使用 redirect_uri: ${redirectUri}`);
 
@@ -1041,7 +1041,7 @@ router.post('/user/tokens/login', userAuth, async (req, res) => {
     // 使用当前请求的域名生成动态 redirect_uri
     const protocol = req.protocol;
     const host = req.get('host');
-    const redirectUri = `${protocol}://${host}/admin/oauth-callback`;
+    const redirectUri = `${protocol}://${host}/antigravity/api/admin/oauth-callback`;
 
     // 生成加密的 state，包含用户 ID
     const stateData = {
@@ -1078,7 +1078,7 @@ router.post('/user/tokens/callback', userAuth, async (req, res) => {
     // 交换 code 获取 token
     const clientId = config.oauth.clientId;
     const clientSecret = config.oauth.clientSecret;
-    const redirectUri = `${req.protocol}://${req.get('host')}/admin/user/token-callback`;
+    const redirectUri = `${req.protocol}://${req.get('host')}/antigravity/api/admin/user/token-callback`;
 
     const tokenData = await new Promise((resolve, reject) => {
       const postData = new URLSearchParams({
