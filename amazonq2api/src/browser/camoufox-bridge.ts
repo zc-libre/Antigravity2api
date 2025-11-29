@@ -1,11 +1,10 @@
 /**
  * Camoufox Python 桥接器
- * 通过子进程调用 Python Camoufox 脚本完成登录/注册
+ * 通过子进程调用 Python Camoufox 脚本完成注册
  */
 import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
-import { AWSCredentials } from "../types/index.js";
 import { logger } from "../utils/logger.js";
 import { GPTMailConfig } from "../config.js";
 
@@ -40,130 +39,6 @@ export interface CamoufoxResult {
     email?: string;
     /** 注册成功时返回的密码 */
     password?: string;
-}
-
-/**
- * 使用 Camoufox 完成设备授权登录
- */
-export async function loginWithCamoufox(
-    verificationUrl: string,
-    credentials: AWSCredentials,
-    options?: CamoufoxOptions
-): Promise<CamoufoxResult> {
-    const camoufoxDir = path.resolve(__dirname, "../../camoufox");
-    const scriptPath = path.join(camoufoxDir, "login_handler.py");
-    const defaultPythonPath = path.join(camoufoxDir, ".venv/bin/python");
-    
-    const pythonPath = options?.pythonPath ?? defaultPythonPath;
-    const timeoutMs = options?.timeoutMs ?? 120_000;
-    
-    const args = [
-        scriptPath,
-        "--url", verificationUrl,
-        "--email", credentials.email,
-        "--password", credentials.password,
-        "--json"
-    ];
-    
-    if (credentials.mfaSecret) {
-        args.push("--mfa-secret", credentials.mfaSecret);
-    }
-    
-    if (options?.headless) {
-        args.push("--headless");
-    }
-    
-    if (options?.proxy) {
-        args.push("--proxy", options.proxy);
-    }
-    
-    logger.info("启动 Camoufox 登录", { 
-        verificationUrl: verificationUrl.slice(0, 50) + "...",
-        email: credentials.email 
-    });
-    
-    return new Promise((resolve, reject) => {
-        const process = spawn(pythonPath, args, {
-            cwd: camoufoxDir,
-            env: { 
-                ...globalThis.process.env,
-                PYTHONUNBUFFERED: "1"  // 实时输出
-            }
-        });
-        
-        let stdout = "";
-        let stderr = "";
-        
-        const timeout = setTimeout(() => {
-            process.kill("SIGTERM");
-            reject(new Error(`Camoufox 登录超时 (${timeoutMs}ms)`));
-        }, timeoutMs);
-        
-        process.stdout.on("data", (data) => {
-            const text = data.toString();
-            stdout += text;
-            // 实时输出日志（过滤 JSON）
-            for (const line of text.split("\n")) {
-                const trimmed = line.trim();
-                if (trimmed && !trimmed.startsWith("{")) {
-                    logger.info("[Camoufox]", { output: trimmed });
-                }
-            }
-        });
-        
-        process.stderr.on("data", (data) => {
-            stderr += data.toString();
-            logger.warn("[Camoufox stderr]", { output: data.toString().trim() });
-        });
-        
-        process.on("close", (code) => {
-            clearTimeout(timeout);
-            
-            // 尝试解析 JSON 输出
-            try {
-                // 从 stdout 中提取 JSON（最后一行）
-                const lines = stdout.trim().split("\n");
-                const jsonLine = lines.find(line => line.trim().startsWith("{"));
-                
-                if (jsonLine) {
-                    const result = JSON.parse(jsonLine) as CamoufoxResult;
-                    logger.info("Camoufox 登录完成", { 
-                        success: result.success, 
-                        message: result.message 
-                    });
-                    resolve(result);
-                    return;
-                }
-            } catch (e) {
-                // JSON 解析失败，使用退出码判断
-            }
-            
-            if (code === 0) {
-                resolve({
-                    success: true,
-                    message: "登录成功"
-                });
-            } else {
-                resolve({
-                    success: false,
-                    message: stderr || stdout || `进程退出码: ${code}`,
-                    errorCode: "PROCESS_EXIT"
-                });
-            }
-        });
-        
-        process.on("error", (error) => {
-            clearTimeout(timeout);
-            
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                reject(new Error(
-                    `未找到 Python 环境，请先运行: cd camoufox && bash setup.sh`
-                ));
-            } else {
-                reject(error);
-            }
-        });
-    });
 }
 
 /**
@@ -397,4 +272,3 @@ export async function ensureCamoufoxInstalled(): Promise<void> {
         }
     }
 }
-

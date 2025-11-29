@@ -4,15 +4,6 @@
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 /**
- * AWS 账号凭据。
- */
-export interface AWSCredentials {
-    email: string;
-    password: string;
-    mfaSecret?: string;
-}
-
-/**
  * OIDC 客户端注册凭据。
  */
 export interface OIDCClientCredentials {

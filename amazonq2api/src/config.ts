@@ -24,27 +24,12 @@ export interface GPTMailConfig {
     timeoutMs?: number;
 }
 
-export interface ProfileConfig {
-    /** 是否启用浏览器指纹隔离（默认 true） */
-    enabled: boolean;
-    /** Profile 存储路径 */
-    storePath: string;
-    /** 是否启用反检测脚本（默认 true） */
-    enableStealth: boolean;
-}
-
-/** 浏览器引擎类型 */
-export type BrowserEngine = "playwright" | "camoufox";
-
 export interface AppConfig {
     headless: boolean;
     proxyManager: ProxyManager;
     outputFile: string;
     logLevel: LogLevel;
     gptmail?: GPTMailConfig;
-    profile: ProfileConfig;
-    /** 浏览器引擎：playwright (Chrome) 或 camoufox (Firefox 反检测) */
-    browserEngine: BrowserEngine;
 }
 
 /**
@@ -68,25 +53,12 @@ export function loadConfig(): AppConfig {
           }
         : undefined;
 
-    // Profile 配置（浏览器指纹隔离）
-    const profile: ProfileConfig = {
-        enabled: (process.env.PROFILE_ENABLED ?? "true").toLowerCase() === "true",
-        storePath: process.env.PROFILE_STORE_PATH ?? path.resolve(process.cwd(), "output/profiles.json"),
-        enableStealth: (process.env.PROFILE_STEALTH ?? "true").toLowerCase() === "true"
-    };
-
-    // 浏览器引擎：playwright (Chrome) 或 camoufox (Firefox 反检测)
-    // 默认使用 camoufox 以获得更好的反检测效果
-    const browserEngine = (process.env.BROWSER_ENGINE ?? "camoufox").toLowerCase() as BrowserEngine;
-
     return {
         headless,
         proxyManager,
         outputFile,
         logLevel,
-        gptmail,
-        profile,
-        browserEngine
+        gptmail
     };
 }
 

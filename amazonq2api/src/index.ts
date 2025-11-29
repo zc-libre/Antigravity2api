@@ -1,56 +1,53 @@
 import { loadConfig, AppConfig } from "./config.js";
-import { AWSCredentials, AccountRecord } from "./types/index.js";
+import { AccountRecord } from "./types/index.js";
 import { registerClient } from "./oidc/client.js";
 import { startDeviceAuthorization } from "./oidc/device-auth.js";
 import { pollForTokens } from "./oidc/token.js";
-import { BrowserAutomation } from "./browser/automation.js";
 import { FileStore } from "./storage/file-store.js";
 import { logger } from "./utils/logger.js";
 import { withRetry } from "./utils/retry.js";
-import { GPTMailClient } from "./email/gptmail-client.js";
-import { RegisterAccountOptions } from "./browser/register-handler.js";
-import { ProfileStore } from "./browser/profile-store.js";
-import { loginWithCamoufox, registerWithCamoufox, ensureCamoufoxInstalled } from "./browser/camoufox-bridge.js";
+import { registerWithCamoufox, ensureCamoufoxInstalled } from "./browser/camoufox-bridge.js";
 
-interface RegistrationWorkflow {
-    mailClient: GPTMailClient;
-    options: RegisterAccountOptions;
-}
-
-interface AutoLoginOptions {
-    credentials?: AWSCredentials;
+interface AutoRegisterOptions {
+    /** 密码（可选，未提供时自动生成） */
+    password?: string;
+    /** 注册用全名（可选） */
+    fullName?: string;
+    /** 是否无头模式 */
     headless?: boolean;
+    /** 标签 */
     label?: string;
+    /** 最大重试次数 */
     maxRetries?: number;
-    registration?: RegistrationWorkflow;
+    /** 配置（可选） */
     config?: AppConfig;
 }
 
 /**
- * 全自动注册并登录 Amazon Q，返回存储后的账号记录。
+ * 全自动注册 Amazon Q 账号，返回存储后的账号记录。
  * 
  * 流程说明：
  * 1. 先注册 OIDC 客户端并获取设备授权码
- * 2. 打开设备验证链接
- * 3. 如果是临时邮箱模式，在验证链接页面自动完成注册+授权
- * 4. 如果是已有账号，直接登录完成授权
+ * 2. 使用 Camoufox 打开设备验证链接
+ * 3. 使用临时邮箱自动完成注册+授权
  */
-export async function autoRegisterAndLogin(options: AutoLoginOptions): Promise<AccountRecord> {
+export async function autoRegister(options: AutoRegisterOptions = {}): Promise<AccountRecord> {
     const config = options.config ?? loadConfig();
     const fileStore = new FileStore(config.outputFile);
-    const browser = new BrowserAutomation(config.proxyManager);
 
     const maxRetries = options.maxRetries ?? 3;
     const headless = options.headless ?? config.headless;
     const label = options.label ?? `Auto-${Date.now()}`;
+
+    if (!config.gptmail) {
+        throw new Error("未配置 GPTMail API，无法使用临时邮箱注册模式");
+    }
 
     const execute = async (): Promise<AccountRecord> => {
         // 第一步：先获取设备授权码（不需要浏览器）
         const { clientId, clientSecret } = await registerClient(config.proxyManager);
         const deviceAuth = await startDeviceAuthorization(clientId, clientSecret, config.proxyManager);
         logger.info("设备授权已获取", { verificationUrl: deviceAuth.verificationUriComplete });
-
-        let finalCredentials: AWSCredentials;
 
         // 创建一个可控的 Token 轮询函数
         const startTokenPolling = (timeoutSec: number) => pollForTokens(
@@ -74,71 +71,33 @@ export async function autoRegisterAndLogin(options: AutoLoginOptions): Promise<A
             return null as any;
         });
 
-        // 根据配置选择浏览器引擎
-        if (config.browserEngine === "camoufox") {
-            // 使用 Camoufox（Firefox 反检测浏览器）
-            logger.info("使用 Camoufox 浏览器引擎");
-            
-            // 确保 Camoufox 已安装（未安装时自动安装）
-            await ensureCamoufoxInstalled();
+        // 确保 Camoufox 已安装（未安装时自动安装）
+        await ensureCamoufoxInstalled();
 
-            if (options.registration) {
-                // 使用 Camoufox 注册模式
-                if (!config.gptmail) {
-                    throw new Error("注册模式需要配置 GPTMail");
-                }
-
-                const proxy = config.proxyManager.getNextProxy();
-                
-                const result = await registerWithCamoufox(
-                    deviceAuth.verificationUriComplete,
-                    {
-                        gptmail: config.gptmail,
-                        password: options.registration.options.password,
-                        fullName: options.registration.options.fullName,
-                        headless,
-                        proxy: proxy ?? undefined
-                    }
-                );
-
-                if (!result.success) {
-                    throw new Error(`Camoufox 注册失败: ${result.message} (${result.errorCode})`);
-                }
-
-                finalCredentials = {
-                    email: result.email!,
-                    password: result.password!
-                };
-
-                logger.info("Camoufox 注册成功", { email: finalCredentials.email });
-            } else {
-                // 已有账号登录模式
-                if (!options.credentials) {
-                    throw new Error("未提供登录凭据");
-                }
-
-                finalCredentials = options.credentials;
-                const proxy = config.proxyManager.getNextProxy();
-                
-                const result = await loginWithCamoufox(
-                    deviceAuth.verificationUriComplete,
-                    finalCredentials,
-                    {
-                        headless,
-                        proxy: proxy ?? undefined
-                    }
-                );
-
-                if (!result.success) {
-                    throw new Error(`Camoufox 登录失败: ${result.message} (${result.errorCode})`);
-                }
-
-                logger.info("Camoufox 登录成功");
+        // 使用 Camoufox 注册
+        const proxy = config.proxyManager.getNextProxy();
+        
+        const result = await registerWithCamoufox(
+            deviceAuth.verificationUriComplete,
+            {
+                gptmail: config.gptmail,
+                password: options.password,
+                fullName: options.fullName,
+                headless,
+                proxy: proxy ?? undefined
             }
-        } else {
-            // 使用 Playwright（Chrome）
-            finalCredentials = await executeWithPlaywright();
+        );
+
+        if (!result.success) {
+            throw new Error(`Camoufox 注册失败: ${result.message} (${result.errorCode})`);
         }
+
+        const finalCredentials = {
+            email: result.email!,
+            password: result.password!
+        };
+
+        logger.info("Camoufox 注册成功", { email: finalCredentials.email });
 
         // 等待 Token（如果初始轮询已完成）
         let tokens = await tokenPromise;
@@ -166,46 +125,8 @@ export async function autoRegisterAndLogin(options: AutoLoginOptions): Promise<A
         };
 
         await fileStore.append(account);
-        logger.info("自动注册登录完成");
+        logger.info("自动注册完成");
         return account;
-
-        // 内部函数：使用 Playwright 执行
-        async function executeWithPlaywright(): Promise<AWSCredentials> {
-            logger.info("使用 Playwright 浏览器引擎");
-            
-            const profileStore = config.profile.enabled ? new ProfileStore(config.profile.storePath) : undefined;
-            const accountEmail = options.credentials?.email ?? options.registration?.options.prefix;
-            
-            await browser.init({ 
-                headless,
-                accountEmail: config.profile.enabled ? accountEmail : undefined,
-                enableStealth: config.profile.enableStealth,
-                profileStore
-            });
-            
-            try {
-                let credentials: AWSCredentials;
-                let browserPromise: Promise<AWSCredentials>;
-
-                if (options.registration) {
-                    browserPromise = browser.authorizeWithRegistration(
-                        deviceAuth.verificationUriComplete,
-                        options.registration.mailClient,
-                        options.registration.options
-                    );
-                } else if (options.credentials) {
-                    credentials = options.credentials;
-                    browserPromise = browser.authorizeDevice(deviceAuth.verificationUriComplete, credentials)
-                        .then(() => credentials);
-                } else {
-                    throw new Error("未提供登录凭据，且未开启注册流程");
-                }
-
-                return await browserPromise;
-            } finally {
-                await browser.close();
-            }
-        }
     };
 
     return withRetry(execute, {
@@ -218,55 +139,15 @@ export async function autoRegisterAndLogin(options: AutoLoginOptions): Promise<A
 
 async function main(): Promise<void> {
     const config = loadConfig();
-    const mode = (process.env.ACCOUNT_MODE ?? "manual").toLowerCase();
-    let options: AutoLoginOptions;
 
-    if (mode === "temp-email") {
-        if (!config.gptmail) {
-            throw new Error("未配置 GPTMail API，无法使用临时邮箱注册模式");
-        }
-        const mailClient = new GPTMailClient({
-            baseUrl: config.gptmail.baseUrl,
-            apiKey: config.gptmail.apiKey,
-            proxyManager: config.proxyManager,
-            defaultPollIntervalMs: config.gptmail.pollIntervalMs,
-            defaultTimeoutMs: config.gptmail.timeoutMs
-        });
-        const registrationOptions: RegisterAccountOptions = {
-            fullName: process.env.AWS_FULL_NAME,
-            prefix: config.gptmail.emailPrefix,
-            domain: config.gptmail.emailDomain,
-            pollIntervalMs: config.gptmail.pollIntervalMs,
-            timeoutMs: config.gptmail.timeoutMs
-        };
-        options = {
-            registration: {
-                mailClient,
-                options: registrationOptions
-            },
-            headless: config.headless,
-            label: `Temp-${Date.now()}`,
-            config
-        };
-    } else {
-        const email = process.env.AWS_EMAIL;
-        const password = process.env.AWS_PASSWORD;
-        if (!email || !password) {
-            throw new Error("请在环境变量 AWS_EMAIL 与 AWS_PASSWORD 中提供登录凭据");
-        }
-        const credentials: AWSCredentials = {
-            email,
-            password,
-            mfaSecret: process.env.AWS_MFA_SECRET
-        };
-        options = {
-            credentials,
-            headless: config.headless,
-            config
-        };
-    }
+    const account = await autoRegister({
+        fullName: process.env.AWS_FULL_NAME,
+        password: process.env.AWS_PASSWORD,
+        headless: config.headless,
+        label: `Temp-${Date.now()}`,
+        config
+    });
 
-    const account = await autoRegisterAndLogin(options);
     logger.info("结果", account);
 }
 
