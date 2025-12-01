@@ -10,14 +10,17 @@ export function MainLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* 侧边栏 */}
       <Sidebar
         isCollapsed={isCollapsed}
         onToggle={() => setIsCollapsed(!isCollapsed)}
         theme={theme}
         onThemeToggle={toggleTheme}
-        className="border-r bg-muted/10"
+        className="border-r border-border/40 shadow-sm"
       />
-      <div className="flex flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out">
+      
+      {/* 主内容区 */}
+      <div className="flex flex-1 flex-col overflow-hidden transition-all duration-300 ease-out">
         <Header />
         <main className="flex-1 overflow-y-auto p-8 scroll-smooth">
           <div className="mx-auto max-w-6xl">

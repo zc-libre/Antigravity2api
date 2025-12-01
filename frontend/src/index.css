@@ -73,3 +73,70 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* 侧边栏玻璃效果 */
+.sidebar-glass {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--color-card) / 0.8),
+    hsl(var(--color-card) / 0.95)
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.dark .sidebar-glass {
+  background: linear-gradient(
+    135deg,
+    hsl(240 10% 6% / 0.9),
+    hsl(240 10% 4% / 0.98)
+  );
+}
+
+/* 侧边栏滚动条样式 */
+.sidebar-glass [data-radix-scroll-area-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--color-border)) transparent;
+}
+
+.sidebar-glass [data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-glass [data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-glass [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
+  background: hsl(var(--color-border));
+  border-radius: 9999px;
+}
+
+.sidebar-glass [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--color-muted-foreground) / 0.3);
+}
+
+/* 自定义滚动条样式 - 用于日志查看器 */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-radius: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 5px;
+  border: 2px solid #1f2937;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: #1f2937;
+}
