@@ -3,7 +3,7 @@ import { AccountRecord } from "./types/index.js";
 import { registerClient } from "./oidc/client.js";
 import { startDeviceAuthorization } from "./oidc/device-auth.js";
 import { pollForTokens } from "./oidc/token.js";
-import { FileStore } from "./storage/file-store.js";
+import { PrismaStore } from "./storage/prisma-store.js";
 import { logger } from "./utils/logger.js";
 import { withRetry } from "./utils/retry.js";
 import { registerWithCamoufox, ensureCamoufoxInstalled } from "./browser/camoufox-bridge.js";
@@ -35,7 +35,7 @@ export interface AutoRegisterOptions {
  */
 export async function autoRegister(options: AutoRegisterOptions = {}): Promise<AccountRecord> {
     const config = options.config ?? loadConfig();
-    const fileStore = new FileStore(config.outputFile);
+    const prismaStore = new PrismaStore();
 
     const maxRetries = options.maxRetries ?? 3;
     const headless = options.headless ?? config.headless;
@@ -147,22 +147,36 @@ export async function autoRegister(options: AutoRegisterOptions = {}): Promise<A
         
         onProgress("令牌获取成功", 95, "成功获取访问令牌");
 
-        const account: AccountRecord = {
+        // 保存到数据库
+        onProgress("保存账号信息", 98, "正在保存账号信息到数据库...");
+        const savedAccount = await prismaStore.create({
             clientId,
             clientSecret,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
-            savedAt: new Date().toISOString(),
+            savedAt: new Date(),
             label,
             expiresIn: tokens.expiresIn,
             awsEmail: finalCredentials.email,
             awsPassword: finalCredentials.password
+        });
+
+        logger.info("自动注册完成", { id: savedAccount.id });
+        onProgress("完成", 100, "自动注册流程完成");
+
+        // 返回兼容的 AccountRecord 格式
+        const account: AccountRecord = {
+            clientId: savedAccount.clientId,
+            clientSecret: savedAccount.clientSecret,
+            accessToken: savedAccount.accessToken || "",
+            refreshToken: savedAccount.refreshToken ?? undefined,
+            savedAt: savedAccount.savedAt.toISOString(),
+            label: savedAccount.label ?? undefined,
+            expiresIn: savedAccount.expiresIn ?? undefined,
+            awsEmail: savedAccount.awsEmail ?? undefined,
+            awsPassword: savedAccount.awsPassword ?? undefined
         };
 
-        onProgress("保存账号信息", 98, "正在保存账号信息...");
-        await fileStore.append(account);
-        logger.info("自动注册完成");
-        onProgress("完成", 100, "自动注册流程完成");
         return account;
     };
 
@@ -195,4 +209,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         process.exitCode = 1;
     });
 }
-

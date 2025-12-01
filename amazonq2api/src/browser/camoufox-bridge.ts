@@ -113,18 +113,19 @@ export async function registerWithCamoufox(
             isKilled = true;
             
             try {
-                if (childProcess.pid) {
+                const pid = childProcess.pid;
+                if (pid) {
                     // 先发送 SIGTERM 给进程组，让 Python 有机会清理
-                    globalThis.process.kill(-childProcess.pid, "SIGTERM");
+                    globalThis.process.kill(-pid, "SIGTERM");
                     
                     // 等待 3 秒后强制杀死（如果还在运行）
                     setTimeout(() => {
                         try {
                             // 检查进程是否还在运行
-                            globalThis.process.kill(-childProcess.pid, 0);
+                            globalThis.process.kill(-pid, 0);
                             // 如果没抛异常说明还在运行，发送 SIGKILL
                             logger.warn("Python 进程未响应 SIGTERM，发送 SIGKILL");
-                            globalThis.process.kill(-childProcess.pid, "SIGKILL");
+                            globalThis.process.kill(-pid, "SIGKILL");
                         } catch {
                             // 进程已退出，忽略错误
                         }

@@ -2,9 +2,8 @@ import express, { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { loadConfig } from "./config.js";
 import { autoRegister, AutoRegisterOptions } from "./index.js";
-import { FileStore } from "./storage/file-store.js";
+import { PrismaStore } from "./storage/prisma-store.js";
 import { logger } from "./utils/logger.js";
-import { AccountRecord } from "./types/index.js";
 import cors from "cors";
 
 // Claude API Proxy imports
@@ -38,6 +37,14 @@ interface LogEntry {
 }
 
 /**
+ * 任务结果类型
+ */
+interface TaskResult {
+    awsEmail?: string;
+    savedAt?: Date | string;
+}
+
+/**
  * 注册任务记录
  */
 interface RegisterTask {
@@ -47,7 +54,7 @@ interface RegisterTask {
     startedAt?: string;
     completedAt?: string;
     options: RegisterTaskOptions;
-    result?: AccountRecord;
+    result?: TaskResult;
     error?: string;
     logs: LogEntry[];
     progress?: {
@@ -150,10 +157,12 @@ function broadcastTaskStatus(taskId: string): void {
 }
 
 const config = loadConfig();
-const fileStore = new FileStore(config.outputFile);
+
+// 初始化 Prisma 存储
+const prismaStore = new PrismaStore();
 
 // 初始化账号管理器
-const accountManager = initAccountManager(config.outputFile);
+const accountManager = initAccountManager();
 
 // Amazon Q API URL
 const AMAZONQ_API_URL = "https://q.us-east-1.amazonaws.com/";
@@ -197,7 +206,10 @@ async function processQueue(): Promise<void> {
         });
         
         task.status = "completed";
-        task.result = account;
+        task.result = {
+            awsEmail: account.awsEmail,
+            savedAt: account.savedAt
+        };
         task.completedAt = new Date().toISOString();
         
         addTaskLog(taskId, "info", `注册成功，邮箱: ${account.awsEmail}`);
@@ -231,13 +243,30 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
  * GET /health
  * 健康检查
  */
-app.get("/health", (_req: Request, res: Response) => {
-    res.json({
-        status: "ok",
-        timestamp: new Date().toISOString(),
-        runningTask: runningTask?.id ?? null,
-        queueLength: taskQueue.length
-    });
+app.get("/health", async (_req: Request, res: Response) => {
+    try {
+        // 检查数据库连接
+        const accountCount = await prismaStore.count();
+        res.json({
+            status: "ok",
+            timestamp: new Date().toISOString(),
+            runningTask: runningTask?.id ?? null,
+            queueLength: taskQueue.length,
+            database: {
+                connected: true,
+                accountCount
+            }
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: "error",
+            timestamp: new Date().toISOString(),
+            database: {
+                connected: false,
+                error: error instanceof Error ? error.message : String(error)
+            }
+        });
+    }
 });
 
 /**
@@ -469,14 +498,19 @@ app.delete("/api/register/:taskId", (req: Request<{ taskId: string }>, res: Resp
  */
 app.get("/api/accounts", async (_req: Request, res: Response) => {
     try {
-        const accounts = await fileStore.readAll();
+        const accounts = await prismaStore.findAll();
         res.json({
             success: true,
             total: accounts.length,
             accounts: accounts.map(acc => ({
+                id: acc.id,
                 email: acc.awsEmail,
                 label: acc.label,
                 savedAt: acc.savedAt,
+                enabled: acc.enabled,
+                type: acc.type,
+                lastRefreshStatus: acc.lastRefreshStatus,
+                lastRefreshTime: acc.lastRefreshTime,
                 hasRefreshToken: !!acc.refreshToken
             }))
         });
@@ -490,14 +524,18 @@ app.get("/api/accounts", async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /api/accounts/:email
+ * GET /api/accounts/:id
  * 获取指定账号详情
  */
-app.get("/api/accounts/:email", async (req: Request<{ email: string }>, res: Response) => {
+app.get("/api/accounts/:id", async (req: Request<{ id: string }>, res: Response) => {
     try {
-        const accounts = await fileStore.readAll();
-        const email = req.params.email;
-        const account = accounts.find(acc => acc.awsEmail === email);
+        const { id } = req.params;
+        
+        // 尝试按 ID 查找，如果失败则按邮箱查找（兼容旧接口）
+        let account = await prismaStore.findById(id);
+        if (!account) {
+            account = await prismaStore.findByEmail(id);
+        }
 
         if (!account) {
             res.status(404).json({
@@ -510,6 +548,7 @@ app.get("/api/accounts/:email", async (req: Request<{ email: string }>, res: Res
         res.json({
             success: true,
             account: {
+                id: account.id,
                 email: account.awsEmail,
                 password: account.awsPassword,
                 clientId: account.clientId,
@@ -518,7 +557,11 @@ app.get("/api/accounts/:email", async (req: Request<{ email: string }>, res: Res
                 refreshToken: account.refreshToken,
                 label: account.label,
                 savedAt: account.savedAt,
-                expiresIn: account.expiresIn
+                expiresIn: account.expiresIn,
+                enabled: account.enabled,
+                type: account.type,
+                lastRefreshStatus: account.lastRefreshStatus,
+                lastRefreshTime: account.lastRefreshTime
             }
         });
     } catch (error) {
@@ -526,6 +569,81 @@ app.get("/api/accounts/:email", async (req: Request<{ email: string }>, res: Res
         res.status(500).json({
             success: false,
             error: "读取账号详情失败"
+        });
+    }
+});
+
+/**
+ * PATCH /api/accounts/:id
+ * 更新账号状态
+ */
+app.patch("/api/accounts/:id", async (req: Request<{ id: string }>, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { enabled, label } = req.body;
+
+        const updates: Record<string, unknown> = {};
+        if (typeof enabled === "boolean") {
+            updates.enabled = enabled;
+        }
+        if (typeof label === "string") {
+            updates.label = label;
+        }
+
+        const account = await prismaStore.update(id, updates);
+
+        if (!account) {
+            res.status(404).json({
+                success: false,
+                error: "账号不存在"
+            });
+            return;
+        }
+
+        res.json({
+            success: true,
+            account: {
+                id: account.id,
+                email: account.awsEmail,
+                label: account.label,
+                enabled: account.enabled
+            }
+        });
+    } catch (error) {
+        logger.error("更新账号失败", { error });
+        res.status(500).json({
+            success: false,
+            error: "更新账号失败"
+        });
+    }
+});
+
+/**
+ * DELETE /api/accounts/:id
+ * 删除账号
+ */
+app.delete("/api/accounts/:id", async (req: Request<{ id: string }>, res: Response) => {
+    try {
+        const { id } = req.params;
+        const deleted = await prismaStore.delete(id);
+
+        if (!deleted) {
+            res.status(404).json({
+                success: false,
+                error: "账号不存在"
+            });
+            return;
+        }
+
+        res.json({
+            success: true,
+            message: "账号已删除"
+        });
+    } catch (error) {
+        logger.error("删除账号失败", { error });
+        res.status(500).json({
+            success: false,
+            error: "删除账号失败"
         });
     }
 });
@@ -850,7 +968,7 @@ app.listen(PORT, () => {
     logger.info(`🚀 Amazon Q 服务已启动`, {
         port: PORT,
         headless: config.headless,
-        outputFile: config.outputFile
+        database: "PostgreSQL"
     });
     logger.info("Claude API 代理端点:", {
         messages: `POST http://localhost:${PORT}/v1/messages`,
@@ -863,9 +981,10 @@ app.listen(PORT, () => {
         listTasks: `GET  http://localhost:${PORT}/api/tasks`,
         cancelTask: `DELETE http://localhost:${PORT}/api/register/:taskId`,
         listAccounts: `GET  http://localhost:${PORT}/api/accounts`,
-        getAccount: `GET  http://localhost:${PORT}/api/accounts/:email`
+        getAccount: `GET  http://localhost:${PORT}/api/accounts/:id`,
+        updateAccount: `PATCH http://localhost:${PORT}/api/accounts/:id`,
+        deleteAccount: `DELETE http://localhost:${PORT}/api/accounts/:id`
     });
 });
 
 export { app };
-

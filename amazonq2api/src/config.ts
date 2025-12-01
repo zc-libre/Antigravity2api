@@ -1,4 +1,3 @@
-import path from "path";
 import dotenv from "dotenv";
 import { ProxyManager } from "./utils/proxy.js";
 import { LogLevel } from "./types/index.js";
@@ -25,12 +24,16 @@ export interface GPTMailConfig {
     timeoutMs?: number;
 }
 
+export interface DatabaseConfig {
+    url: string;
+}
+
 export interface AppConfig {
     headless: boolean;
     proxyManager: ProxyManager;
-    outputFile: string;
     logLevel: LogLevel;
     gptmail?: GPTMailConfig;
+    database: DatabaseConfig;
 }
 
 /**
@@ -39,7 +42,6 @@ export interface AppConfig {
 export function loadConfig(): AppConfig {
     // 默认打开可见浏览器窗口（headless: false），设置 HEADLESS=true 可切换到无头模式
     const headless = (process.env.HEADLESS ?? "false").toLowerCase() === "true";
-    const outputFile = process.env.OUTPUT_FILE ?? path.resolve(process.cwd(), "output/accounts.ndjson");
     const proxyManager = ProxyManager.fromEnv();
     const logLevel = (process.env.LOG_LEVEL as LogLevel) ?? "info";
     const gptmailApiKey = process.env.GPTMAIL_API_KEY ?? process.env.GPTMAIL_KEY;
@@ -54,12 +56,20 @@ export function loadConfig(): AppConfig {
           }
         : undefined;
 
+    // 数据库配置
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+        throw new Error("DATABASE_URL 环境变量未设置");
+    }
+
     return {
         headless,
         proxyManager,
-        outputFile,
         logLevel,
-        gptmail
+        gptmail,
+        database: {
+            url: databaseUrl
+        }
     };
 }
 

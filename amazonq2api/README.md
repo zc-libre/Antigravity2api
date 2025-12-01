@@ -4,49 +4,91 @@
 
 ## 快速开始
 
-1. 安装依赖
+### 1. 安装依赖
 
-    ```bash
-    pnpm install
-    # 或
-    npm install
-    ```
+```bash
+pnpm install
+# 或
+npm install
+```
 
-2. 配置环境变量
+### 2. 配置数据库
 
-    ```bash
-    cp .env.example .env
-    # 按需填写配置项
-    ```
+本项目使用 PostgreSQL 数据库存储账号数据。
 
-    必要的环境变量：
-    - `GPTMAIL_API_KEY`: GPTMail 临时邮箱 API Key
-    - `GPTMAIL_BASE_URL`: GPTMail API 地址（默认 https://mail.chatgpt.org.uk）
-    
-    可选配置：
-    - `PORT`: Web 服务端口（默认 3000）
-    - `HEADLESS`: 是否无头模式（默认 false）
-    - `HTTP_PROXY`: HTTP 代理地址
-    - `PROXY_LIST`: 代理列表文件路径
-    - `OUTPUT_FILE`: 账号存储文件路径（默认 output/accounts.ndjson）
-    - `LOG_LEVEL`: 日志级别（debug|info|warn|error）
+**方式一：使用 Docker Compose（推荐）**
 
-3. 启动 Web 服务
+```bash
+# 启动 PostgreSQL 和应用服务
+docker compose up -d
+```
 
-    ```bash
-    npm start
-    # 或开发模式（热重载）
-    npm run dev
-    ```
+**方式二：使用现有 PostgreSQL 实例**
 
-4. 调用 API 创建注册任务
+设置 `DATABASE_URL` 环境变量：
 
-    ```bash
-    # 创建注册任务
-    curl -X POST http://localhost:3000/api/register \
-      -H "Content-Type: application/json" \
-      -d '{"label": "测试账号"}'
-    ```
+```bash
+export DATABASE_URL="postgresql://user:password@localhost:5432/amazonq?schema=public"
+```
+
+### 3. 初始化数据库
+
+```bash
+# 推送 schema 到数据库
+pnpm run db:push
+
+# 或使用迁移（生产环境推荐）
+pnpm run db:migrate
+```
+
+### 4. 配置环境变量
+
+创建 `.env` 文件并配置以下变量：
+
+```bash
+# 数据库配置（必需）
+DATABASE_URL=postgresql://amazonq:amazonq_secret@localhost:5432/amazonq?schema=public
+
+# GPTMail 配置（自动注册必需）
+GPTMAIL_API_KEY=your-api-key
+GPTMAIL_BASE_URL=https://mail.chatgpt.org.uk
+
+# 可选配置
+PORT=3000
+HEADLESS=false
+LOG_LEVEL=info
+API_KEY=your-optional-api-key
+```
+
+### 5. 启动服务
+
+```bash
+pnpm start
+# 或开发模式（热重载）
+pnpm run dev
+```
+
+### 6. 数据迁移（从旧版本升级）
+
+如果之前使用文件存储（accounts.ndjson），可以迁移数据到数据库：
+
+```bash
+# 迁移 output/accounts.ndjson 中的数据
+pnpm run migrate:data output/accounts.ndjson
+```
+
+## 环境变量说明
+
+| 变量名 | 说明 | 必需 | 默认值 |
+|--------|------|------|--------|
+| `DATABASE_URL` | PostgreSQL 连接字符串 | 是 | - |
+| `PORT` | Web 服务端口 | 否 | `3000` |
+| `HEADLESS` | 无头浏览器模式 | 否 | `false` |
+| `LOG_LEVEL` | 日志级别 (debug/info/warn/error) | 否 | `info` |
+| `API_KEY` | API 访问密钥（不设置则无需验证） | 否 | - |
+| `GPTMAIL_API_KEY` | GPTMail API 密钥 | 自动注册必需 | - |
+| `GPTMAIL_BASE_URL` | GPTMail API 地址 | 否 | `https://mail.chatgpt.org.uk` |
+| `HTTP_PROXY` | HTTP 代理地址 | 否 | - |
 
 ## API 接口说明
 
@@ -56,9 +98,45 @@
 GET /health
 ```
 
-返回服务状态、当前运行任务和队列长度。
+返回服务状态、数据库连接状态和账号统计。
 
-### 创建注册任务
+### 账号管理
+
+#### 获取账号列表
+
+```
+GET /api/accounts
+```
+
+#### 获取账号详情
+
+```
+GET /api/accounts/:id
+```
+
+支持按 ID 或邮箱查询。
+
+#### 更新账号
+
+```
+PATCH /api/accounts/:id
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "label": "新标签"
+}
+```
+
+#### 删除账号
+
+```
+DELETE /api/accounts/:id
+```
+
+### 注册任务
+
+#### 创建注册任务
 
 ```
 POST /api/register
@@ -73,198 +151,143 @@ Content-Type: application/json
 }
 ```
 
-**响应示例：**
-```json
-{
-  "success": true,
-  "taskId": "uuid-xxxxx",
-  "message": "注册任务已创建",
-  "position": 1
-}
-```
-
-### 查询任务状态
+#### 查询任务状态
 
 ```
 GET /api/register/:taskId
 ```
 
-**响应示例：**
-```json
-{
-  "success": true,
-  "task": {
-    "id": "uuid-xxxxx",
-    "status": "running",
-    "createdAt": "2024-01-01T00:00:00.000Z",
-    "startedAt": "2024-01-01T00:00:01.000Z",
-    "label": "测试账号",
-    "queuePosition": null
-  }
-}
-```
-
-任务状态（`status`）说明：
+任务状态说明：
 - `pending`: 等待执行
 - `running`: 正在执行
 - `completed`: 执行完成
 - `failed`: 执行失败
 
-### 列出所有任务
+#### 获取任务日志（支持 SSE）
+
+```
+GET /api/register/:taskId/logs
+Accept: text/event-stream  # 实时推送
+```
+
+#### 列出所有任务
 
 ```
 GET /api/tasks
 ```
 
-### 取消等待中的任务
+#### 取消任务
 
 ```
 DELETE /api/register/:taskId
 ```
 
-### 获取已注册账号列表
+### Claude API 代理
+
+#### 发送消息
 
 ```
-GET /api/accounts
+POST /v1/messages
+Content-Type: application/json
+x-api-key: your-api-key  # 如果设置了 API_KEY
+
+{
+  "model": "claude-sonnet-4.5",
+  "messages": [...]
+}
 ```
 
-### 获取账号详情
+#### 列出模型
 
 ```
-GET /api/accounts/:email
+GET /v1/models
 ```
 
-返回完整的账号信息，包括：
-- `email`: 邮箱地址
-- `password`: 密码
-- `clientId`: OIDC 客户端 ID
-- `clientSecret`: OIDC 客户端密钥
-- `accessToken`: 访问令牌
-- `refreshToken`: 刷新令牌
-
-## 运行模式
-
-### Web API 模式（推荐）
+## 数据库命令
 
 ```bash
-npm start        # 生产模式
-npm run dev      # 开发模式（热重载）
+# 生成 Prisma Client
+pnpm run db:generate
+
+# 开发环境迁移
+pnpm run db:migrate
+
+# 生产环境迁移
+pnpm run db:migrate:prod
+
+# 推送 schema（不生成迁移文件）
+pnpm run db:push
+
+# 打开 Prisma Studio
+pnpm run db:studio
+
+# 迁移旧数据
+pnpm run migrate:data [ndjson文件路径]
 ```
-
-### CLI 模式（单次执行）
-
-```bash
-npm run start:cli
-```
-
-## 目录结构
-
-```
-src/
-├── server.ts          # Web API 服务入口
-├── index.ts           # 核心注册逻辑
-├── config.ts          # 配置管理
-├── browser/           # Camoufox 浏览器自动化
-├── oidc/              # OIDC 客户端、设备授权、Token
-├── storage/           # NDJSON 文件存储
-├── types/             # 类型定义
-└── utils/             # 工具函数（日志、重试、代理）
-```
-
-## 设计要点
-
-- **Web API 接口**：提供 RESTful API 管理注册任务
-- **任务队列**：支持并发请求，任务按顺序执行
-- **头部一致性**：所有 OIDC 请求使用与原版完全一致的 User-Agent
-- **并行授权**：浏览器自动化与 Token 轮询并行执行
-- **严格类型**：TypeScript 严格模式，完整类型定义
-- **存储可靠**：NDJSON 原子追加写入
-- **代理支持**：支持 HTTP 代理和代理轮换
 
 ## Docker 部署
 
 ### 使用 Docker Compose（推荐）
 
-1. 配置环境变量
+1. 创建 `.env` 文件：
 
-    ```bash
-    cp .env.example .env
-    # 编辑 .env 文件，填写必要配置
-    ```
+```bash
+# PostgreSQL 配置
+POSTGRES_USER=amazonq
+POSTGRES_PASSWORD=amazonq_secret
+POSTGRES_DB=amazonq
 
-2. 启动服务
+# 应用配置
+PORT=3000
+HEADLESS=true
+LOG_LEVEL=info
+GPTMAIL_API_KEY=your-api-key
+```
 
-    ```bash
-    docker compose up -d
-    ```
+2. 启动服务：
 
-3. 查看日志
+```bash
+docker compose up -d
+```
 
-    ```bash
-    docker compose logs -f
-    ```
+3. 查看日志：
 
-4. 停止服务
+```bash
+docker compose logs -f amazonq2api
+```
 
-    ```bash
-    docker compose down
-    ```
+4. 运行数据库迁移：
 
-### 使用 Docker 命令
-
-1. 构建镜像
-
-    ```bash
-    docker build -t amazonq2api .
-    ```
-
-2. 运行容器
-
-    ```bash
-    docker run -d --name amazonq2api \
-      -p 3000:3000 \
-      -e GPTMAIL_API_KEY=your-api-key \
-      -e GPTMAIL_BASE_URL=https://mail.chatgpt.org.uk \
-      -e HEADLESS=true \
-      -v amazonq-data:/app/output \
-      amazonq2api
-    ```
-
-    或使用 .env 文件：
-
-    ```bash
-    docker run -d --name amazonq2api \
-      -p 3000:3000 \
-      --env-file .env \
-      -v amazonq-data:/app/output \
-      amazonq2api
-    ```
-
-3. 查看日志
-
-    ```bash
-    docker logs -f amazonq2api
-    ```
-
-### Docker 环境变量说明
-
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
-| `PORT` | Web 服务端口 | `3000` |
-| `HEADLESS` | 无头模式（Docker 中必须为 true） | `true` |
-| `GPTMAIL_API_KEY` | GPTMail API 密钥（必需） | - |
-| `GPTMAIL_BASE_URL` | GPTMail API 地址 | `https://mail.chatgpt.org.uk` |
-| `HTTP_PROXY` | HTTP 代理地址 | - |
-| `LOG_LEVEL` | 日志级别 | `info` |
+```bash
+docker compose exec amazonq2api npx prisma migrate deploy
+```
 
 ### 数据持久化
 
-账号数据存储在 `/app/output` 目录，建议挂载卷以持久化：
+数据库数据存储在 Docker 卷 `amazonq2api-postgres-data` 中。
 
-```bash
--v amazonq-data:/app/output
-# 或挂载本地目录
--v $(pwd)/output:/app/output
+## 目录结构
+
+```
+src/
+├── server.ts              # Web API 服务入口
+├── index.ts               # 核心注册逻辑
+├── config.ts              # 配置管理
+├── browser/               # Camoufox 浏览器自动化
+├── oidc/                  # OIDC 客户端、设备授权、Token
+├── proxy/                 # Claude API 代理
+│   ├── account-manager.ts # 账号管理（使用 Prisma）
+│   ├── auth.ts            # 认证和 Token 刷新
+│   └── ...
+├── storage/
+│   ├── prisma-store.ts    # Prisma 数据库存储层
+│   └── file-store.ts      # 旧版文件存储（已弃用）
+├── types/                 # 类型定义
+└── utils/                 # 工具函数
+prisma/
+└── schema.prisma          # 数据库模型定义
+scripts/
+└── migrate-data.ts        # 数据迁移脚本
 ```
 
 ## 注意事项
@@ -273,3 +296,4 @@ src/
 - 建议使用代理并适当间隔调用，降低风控概率
 - Camoufox 初次运行会自动下载浏览器，可能需要数分钟
 - **Docker 部署必须使用无头模式** (`HEADLESS=true`)
+- 数据库密码请在生产环境中使用强密码

@@ -150,7 +150,7 @@ export async function refreshAccountToken(
             accessToken: newAccessToken,
             refreshToken: newRefreshToken,
             lastRefreshStatus: "success",
-            lastRefreshTime: new Date().toISOString()
+            lastRefreshTime: new Date()
         };
 
         // 如果提供了 accountManager，保存更新

@@ -25,6 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { amazonqApi } from '@/services/api'
 import {
@@ -46,16 +54,26 @@ import {
   Sparkles,
   Filter,
   Tag,
+  Trash2,
+  Power,
+  MoreHorizontal,
+  AlertCircle,
 } from 'lucide-react'
 
 interface Account {
+  id: string
   email: string
   label?: string
   savedAt?: string
+  enabled: boolean
+  type: string
+  lastRefreshStatus?: string
+  lastRefreshTime?: string
   hasRefreshToken: boolean
 }
 
 interface AccountDetail {
+  id: string
   email: string
   password: string
   clientId?: string
@@ -65,9 +83,13 @@ interface AccountDetail {
   label?: string
   savedAt?: string
   expiresIn?: number
+  enabled: boolean
+  type: string
+  lastRefreshStatus?: string
+  lastRefreshTime?: string
 }
 
-type FilterType = 'all' | 'with-token' | 'without-token'
+type FilterType = 'all' | 'with-token' | 'without-token' | 'enabled' | 'disabled'
 
 export function AmazonQAccounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -104,9 +126,40 @@ export function AmazonQAccounts() {
     const total = accounts.length
     const withToken = accounts.filter(a => a.hasRefreshToken).length
     const withoutToken = total - withToken
+    const enabled = accounts.filter(a => a.enabled).length
+    const disabled = total - enabled
     const labels = new Set(accounts.filter(a => a.label).map(a => a.label)).size
-    return { total, withToken, withoutToken, labels }
+    return { total, withToken, withoutToken, enabled, disabled, labels }
   }, [accounts])
+
+  // 切换账号启用状态
+  const toggleAccountEnabled = async (account: Account) => {
+    try {
+      const res = await amazonqApi.updateAccount(account.id, { enabled: !account.enabled })
+      if (res.success) {
+        setAccounts(prev => prev.map(a => 
+          a.id === account.id ? { ...a, enabled: !a.enabled } : a
+        ))
+      }
+    } catch (error) {
+      console.error('Failed to toggle account:', error)
+    }
+  }
+
+  // 删除账号
+  const deleteAccount = async (account: Account) => {
+    if (!confirm(`确定要删除账号 ${account.email} 吗？此操作不可恢复。`)) {
+      return
+    }
+    try {
+      const res = await amazonqApi.deleteAccount(account.id)
+      if (res.success) {
+        setAccounts(prev => prev.filter(a => a.id !== account.id))
+      }
+    } catch (error) {
+      console.error('Failed to delete account:', error)
+    }
+  }
 
   // 过滤和排序账号
   const filteredAccounts = useMemo(() => {
@@ -126,6 +179,10 @@ export function AmazonQAccounts() {
       result = result.filter(a => a.hasRefreshToken)
     } else if (filterType === 'without-token') {
       result = result.filter(a => !a.hasRefreshToken)
+    } else if (filterType === 'enabled') {
+      result = result.filter(a => a.enabled)
+    } else if (filterType === 'disabled') {
+      result = result.filter(a => !a.enabled)
     }
 
     // 排序
@@ -142,11 +199,11 @@ export function AmazonQAccounts() {
     return result
   }, [accounts, searchQuery, filterType, sortBy])
 
-  const viewAccountDetail = async (email: string) => {
+  const viewAccountDetail = async (id: string) => {
     setDialogOpen(true)
     setDetailLoading(true)
     try {
-      const res = await amazonqApi.getAccountDetail(email)
+      const res = await amazonqApi.getAccountDetail(id)
       if (res.success && res.data) {
         const data = res.data as { account?: AccountDetail }
         setSelectedAccount(data.account || null)
@@ -249,15 +306,15 @@ export function AmazonQAccounts() {
         <Card className="relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent">
           <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">待激活</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">已启用</CardTitle>
             <div className="p-2 rounded-lg bg-amber-500/10">
-              <Shield className="h-4 w-4 text-amber-500" />
+              <Power className="h-4 w-4 text-amber-500" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tracking-tight">{stats.withoutToken}</div>
+            <div className="text-3xl font-bold tracking-tight">{stats.enabled}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              缺少 Refresh Token
+              {stats.disabled} 个已禁用
             </p>
           </CardContent>
         </Card>
@@ -330,13 +387,17 @@ export function AmazonQAccounts() {
                   <TabsTrigger value="all" className="text-xs px-3 h-7">
                     全部
                   </TabsTrigger>
-                  <TabsTrigger value="with-token" className="text-xs px-3 h-7">
+                  <TabsTrigger value="enabled" className="text-xs px-3 h-7">
                     <CheckCircle className="h-3 w-3 mr-1" />
-                    有Token
+                    启用
                   </TabsTrigger>
-                  <TabsTrigger value="without-token" className="text-xs px-3 h-7">
+                  <TabsTrigger value="disabled" className="text-xs px-3 h-7">
                     <XCircle className="h-3 w-3 mr-1" />
-                    无Token
+                    禁用
+                  </TabsTrigger>
+                  <TabsTrigger value="with-token" className="text-xs px-3 h-7">
+                    <Key className="h-3 w-3 mr-1" />
+                    有Token
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -381,24 +442,25 @@ export function AmazonQAccounts() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-border/50">
-                    <TableHead className="w-[300px]">邮箱</TableHead>
-                    <TableHead className="w-[120px]">标签</TableHead>
-                    <TableHead className="w-[120px]">Token 状态</TableHead>
-                    <TableHead className="w-[120px]">注册时间</TableHead>
-                    <TableHead className="text-right w-[100px]">操作</TableHead>
+                    <TableHead className="w-[280px]">邮箱</TableHead>
+                    <TableHead className="w-[100px]">标签</TableHead>
+                    <TableHead className="w-[80px]">状态</TableHead>
+                    <TableHead className="w-[100px]">Token</TableHead>
+                    <TableHead className="w-[100px]">注册时间</TableHead>
+                    <TableHead className="text-right w-[120px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAccounts.map((account, index) => (
                     <TableRow
-                      key={account.email}
-                      className="group border-border/50 hover:bg-muted/30 transition-colors"
+                      key={account.id}
+                      className={`group border-border/50 hover:bg-muted/30 transition-colors ${!account.enabled ? 'opacity-60' : ''}`}
                       style={{ animationDelay: `${index * 20}ms` }}
                     >
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20">
-                            <Mail className="h-4 w-4 text-emerald-500" />
+                          <div className={`flex items-center justify-center w-8 h-8 rounded-lg border ${account.enabled ? 'bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border-emerald-500/20' : 'bg-muted border-border'}`}>
+                            <Mail className={`h-4 w-4 ${account.enabled ? 'text-emerald-500' : 'text-muted-foreground'}`} />
                           </div>
                           <span className="font-mono text-sm">{account.email}</span>
                         </div>
@@ -411,6 +473,13 @@ export function AmazonQAccounts() {
                         ) : (
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={account.enabled}
+                          onCheckedChange={() => toggleAccountEnabled(account)}
+                          className="data-[state=checked]:bg-emerald-500"
+                        />
                       </TableCell>
                       <TableCell>
                         {account.hasRefreshToken ? (
@@ -432,15 +501,42 @@ export function AmazonQAccounts() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => viewAccountDetail(account.email)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          详情
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => viewAccountDetail(account.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            详情
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => toggleAccountEnabled(account)}>
+                                <Power className="h-4 w-4 mr-2" />
+                                {account.enabled ? '禁用账号' : '启用账号'}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => deleteAccount(account)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                删除账号
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -554,7 +650,27 @@ export function AmazonQAccounts() {
                     value={formatDate(selectedAccount.savedAt)}
                     compact
                   />
+                  <DetailItem
+                    icon={<Power className="h-4 w-4" />}
+                    label="账号状态"
+                    value={selectedAccount.enabled ? '已启用' : '已禁用'}
+                    compact
+                  />
+                  <DetailItem
+                    icon={<Shield className="h-4 w-4" />}
+                    label="账号类型"
+                    value={selectedAccount.type || 'amazonq'}
+                    compact
+                  />
                 </div>
+                {selectedAccount.lastRefreshStatus && (
+                  <DetailItem
+                    icon={<AlertCircle className="h-4 w-4" />}
+                    label="上次刷新状态"
+                    value={`${selectedAccount.lastRefreshStatus}${selectedAccount.lastRefreshTime ? ` (${formatDate(selectedAccount.lastRefreshTime)})` : ''}`}
+                    compact
+                  />
+                )}
                 {selectedAccount.expiresIn && (
                   <DetailItem
                     icon={<Calendar className="h-4 w-4" />}

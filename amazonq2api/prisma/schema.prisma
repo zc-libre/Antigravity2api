@@ -1,0 +1,36 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Amazon Q 账号记录
+model Account {
+  id                String    @id @default(cuid())
+  clientId          String
+  clientSecret      String
+  accessToken       String?
+  refreshToken      String?
+  label             String?
+  savedAt           DateTime  @default(now())
+  expiresIn         Int?
+  awsEmail          String?   @unique
+  awsPassword       String?
+  enabled           Boolean   @default(true)
+  type              String    @default("amazonq")
+  lastRefreshStatus String?
+  lastRefreshTime   DateTime?
+  other             Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([enabled])
+  @@index([type])
+  @@index([awsEmail])
+}

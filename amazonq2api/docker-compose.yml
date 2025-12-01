@@ -10,6 +10,32 @@
 # ============================================
 
 services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: amazonq2api-postgres
+    restart: unless-stopped
+    
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-amazonq}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-amazonq_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-amazonq}
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-amazonq} -d ${POSTGRES_DB:-amazonq}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    # 仅在内部网络暴露
+    networks:
+      - amazonq-network
+
+  # Amazon Q API 服务
   amazonq2api:
     build:
       context: .
@@ -17,6 +43,11 @@ services:
     image: amazonq2api:latest
     container_name: amazonq2api
     restart: unless-stopped
+    
+    # 依赖 PostgreSQL
+    depends_on:
+      postgres:
+        condition: service_healthy
     
     # 端口映射
     ports:
@@ -28,7 +59,12 @@ services:
       - PORT=${PORT:-3000}
       - HEADLESS=${HEADLESS:-true}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - OUTPUT_FILE=${OUTPUT_FILE:-output/accounts.ndjson}
+      
+      # 数据库配置
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-amazonq}:${POSTGRES_PASSWORD:-amazonq_secret}@postgres:5432/${POSTGRES_DB:-amazonq}?schema=public
+      
+      # API 认证
+      - API_KEY=${API_KEY:-}
       
       # GPTMail 配置
       - GPTMAIL_API_KEY=${GPTMAIL_API_KEY}
@@ -40,12 +76,8 @@ services:
       - HTTP_PROXY=${HTTP_PROXY:-}
       - PROXY_LIST=${PROXY_LIST:-}
     
-    # 数据持久化
-    volumes:
-      # 账号数据持久化
-      - amazonq-data:/app/output
-      # 可选：挂载本地 .env 文件
-      # - ./.env:/app/.env:ro
+    networks:
+      - amazonq-network
     
     # 健康检查
     healthcheck:
@@ -53,7 +85,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     
     # 资源限制
     deploy:
@@ -74,7 +106,13 @@ services:
         max-size: "10m"
         max-file: "3"
 
+# 网络配置
+networks:
+  amazonq-network:
+    name: amazonq-network
+    driver: bridge
+
 # 命名卷
 volumes:
-  amazonq-data:
-    name: amazonq2api-data
+  postgres-data:
+    name: amazonq2api-postgres-data

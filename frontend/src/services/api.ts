@@ -367,7 +367,18 @@ export const amazonqApi = {
   // 获取所有账号
   getAccounts: () => amazonqRequest('/api/accounts'),
 
-  // 获取账号详情
-  getAccountDetail: (email: string) => amazonqRequest(`/api/accounts/${encodeURIComponent(email)}`),
+  // 获取账号详情（支持 id 或 email）
+  getAccountDetail: (idOrEmail: string) => amazonqRequest(`/api/accounts/${encodeURIComponent(idOrEmail)}`),
+
+  // 更新账号（启用/禁用、标签）
+  updateAccount: (id: string, data: { enabled?: boolean; label?: string }) =>
+    amazonqRequest(`/api/accounts/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // 删除账号
+  deleteAccount: (id: string) =>
+    amazonqRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 
