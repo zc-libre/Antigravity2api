@@ -21,7 +21,7 @@ export function mergeUserMessages(userMessages: UserInputMsg[]): UserInputMsg {
         return {
             content: "",
             userInputMessageContext: {},
-            origin: "CLI"
+            origin: "KIRO_CLI"
         };
     }
 

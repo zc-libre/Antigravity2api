@@ -813,6 +813,12 @@ app.get("/v1/models", (_req: Request, res: Response) => {
                 owned_by: "amazon-q"
             },
             {
+                id: "claude-opus-4.5",
+                object: "model",
+                created: Date.now(),
+                owned_by: "amazon-q"
+            },
+            {
                 id: "claude-sonnet-4",
                 object: "model",
                 created: Date.now(),

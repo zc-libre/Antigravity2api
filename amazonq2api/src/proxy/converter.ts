@@ -67,6 +67,10 @@ export function getCurrentTimestamp(): string {
 export function mapClaudeModelToAmazonQ(claudeModel: string): string {
     const modelLower = claudeModel.toLowerCase();
 
+    if (modelLower.startsWith("claude-opus-4.5") || modelLower.startsWith("claude-opus-4-5")) {
+        return "claude-opus-4.5";
+    }
+
     if (modelLower.startsWith("claude-sonnet-4.5") || modelLower.startsWith("claude-sonnet-4-5")) {
         return "claude-sonnet-4.5";
     }
@@ -257,7 +261,7 @@ export function convertClaudeToCodeWhispererRequest(
     const userInputMessage: UserInputMessage = {
         content: formattedContent,
         userInputMessageContext: userContext,
-        origin: "CLI",
+        origin: "KIRO_CLI",
         modelId,
         images
     };
@@ -273,7 +277,9 @@ export function convertClaudeToCodeWhispererRequest(
         currentMessage: {
             userInputMessage
         },
-        chatTriggerType: "MANUAL"
+        chatTriggerType: "MANUAL",
+        agentContinuationId: uuidv4(),
+        agentTaskType: "vibe"
     };
 
     return {
@@ -383,7 +389,7 @@ export function convertHistoryMessages(messages: ClaudeMessage[]): HistoryEntry[
                 userInputMessage: {
                     content: textContent,
                     userInputMessageContext: userInputContext,
-                    origin: "CLI",
+                    origin: "KIRO_CLI",
                     images
                 }
             };
@@ -396,7 +402,6 @@ export function convertHistoryMessages(messages: ClaudeMessage[]): HistoryEntry[
 
             const assistantEntry: HistoryEntry = {
                 assistantResponseMessage: {
-                    messageId: uuidv4(),
                     content: textContent
                 }
             };
@@ -489,7 +494,9 @@ export function codewhispererRequestToDict(request: CodeWhispererRequest): Recor
             currentMessage: {
                 userInputMessage: userInputMessageDict
             },
-            chatTriggerType: request.conversationState.chatTriggerType
+            chatTriggerType: request.conversationState.chatTriggerType,
+            agentContinuationId: request.conversationState.agentContinuationId,
+            agentTaskType: request.conversationState.agentTaskType
         }
     };
 

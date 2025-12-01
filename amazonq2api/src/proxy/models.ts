@@ -173,7 +173,7 @@ export interface CurrentMessage {
  * 助手响应消息
  */
 export interface AssistantResponseMessage {
-    messageId: string;
+    messageId?: string;
     content: string;
     toolUses?: Array<{
         toolUseId: string;
@@ -203,6 +203,8 @@ export interface ConversationState {
     history: HistoryEntry[];
     currentMessage: CurrentMessage;
     chatTriggerType: string;
+    agentContinuationId?: string;
+    agentTaskType?: string;
 }
 
 /**

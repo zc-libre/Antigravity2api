@@ -290,9 +290,9 @@ export function buildAmazonQHeaders(authHeaders: Record<string, string>): Record
         "Content-Type": "application/x-amz-json-1.0",
         "X-Amz-Target": "AmazonCodeWhispererStreamingService.GenerateAssistantResponse",
         "User-Agent":
-            "aws-sdk-rust/1.3.9 ua/2.1 api/codewhispererstreaming/0.1.11582 os/macos lang/rust/1.87.0 md/appVersion-1.19.3 app/AmazonQ-For-CLI",
+            "aws-sdk-rust/1.3.10 ua/2.1 api/codewhispererstreaming/0.1.12842 os/macos lang/rust/1.88.0 md/appVersion-1.21.0 app/AmazonQ-For-CLI",
         "X-Amz-User-Agent":
-            "aws-sdk-rust/1.3.9 ua/2.1 api/codewhispererstreaming/0.1.11582 os/macos lang/rust/1.87.0 m/F app/AmazonQ-For-CLI",
+            "aws-sdk-rust/1.3.10 ua/2.1 api/codewhispererstreaming/0.1.12842 os/macos lang/rust/1.88.0 m/F app/AmazonQ-For-CLI",
         "X-Amzn-Codewhisperer-Optout": "true",
         "Amz-Sdk-Request": "attempt=1; max=3",
         "Amz-Sdk-Invocation-Id": uuidv4(),
