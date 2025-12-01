@@ -144,8 +144,8 @@ export async function refreshAccountToken(
             throw new TokenRefreshError("响应中缺少 accessToken");
         }
 
-        // 更新账号（优先返回持久化后的最新状态，与 Python 版本保持一致）
-        let updatedAccount: Account = {
+        // 更新账号
+        const updatedAccount: Account = {
             ...account,
             accessToken: newAccessToken,
             refreshToken: newRefreshToken,
@@ -155,15 +155,7 @@ export async function refreshAccountToken(
 
         // 如果提供了 accountManager，保存更新
         if (accountManager && account.id) {
-            const persistedAccount = await accountManager.updateAccountTokens(
-                account.id,
-                newAccessToken,
-                newRefreshToken,
-                "success"
-            );
-            if (persistedAccount) {
-                updatedAccount = persistedAccount;
-            }
+            await accountManager.updateAccountTokens(account.id, newAccessToken, newRefreshToken, "success");
         }
 
         logger.info(`账号 ${accountId} Token 刷新成功`);

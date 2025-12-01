@@ -1,0 +1,58 @@
+# ============================================
+# Docker 构建忽略文件
+# ============================================
+
+# 依赖目录（构建时重新安装）
+node_modules/
+camoufox/.venv/
+
+# 输出文件
+output/
+*.ndjson
+
+# 环境配置
+.env
+.env.*
+!.env.example
+
+# 开发文件
+*.log
+*.md
+!README.md
+docs/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 调试截图
+debug_*.png
+
+# macOS
+.DS_Store
+
+# TypeScript 编译输出
+dist/
+
+# 测试
+__tests__/
+*.test.ts
+*.spec.ts
+coverage/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore

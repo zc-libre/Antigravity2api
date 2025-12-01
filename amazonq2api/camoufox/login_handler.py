@@ -10,12 +10,52 @@ import time
 import random
 import argparse
 import re
+import signal
+import atexit
 import requests
 from typing import Optional, Tuple, List
 from dataclasses import dataclass, asdict
 
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import Page, Frame, Locator, TimeoutError as PlaywrightTimeout
+
+# 全局浏览器引用，用于信号处理时清理
+_active_browser = None
+_cleanup_done = False
+
+
+def cleanup_browser():
+    """清理浏览器资源"""
+    global _active_browser, _cleanup_done
+    if _cleanup_done:
+        return
+    _cleanup_done = True
+    
+    if _active_browser is not None:
+        try:
+            print("[*] 正在清理浏览器资源...")
+            _active_browser.close()
+            print("[+] 浏览器已关闭")
+        except Exception as e:
+            print(f"[!] 关闭浏览器时出错: {e}")
+        finally:
+            _active_browser = None
+
+
+def signal_handler(signum, frame):
+    """信号处理器 - 确保在收到 SIGTERM/SIGINT 时清理资源"""
+    sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+    print(f"\n[!] 收到信号 {sig_name}，正在清理...")
+    cleanup_browser()
+    sys.exit(128 + signum)
+
+
+# 注册信号处理器
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+# 注册退出时清理
+atexit.register(cleanup_browser)
 
 # 尝试导入 pyotp（用于 MFA）
 try:
@@ -1846,6 +1886,9 @@ def login_with_camoufox(
     """
     使用 Camoufox 完成 Amazon 设备授权登录。
     """
+    global _active_browser, _cleanup_done
+    _cleanup_done = False  # 重置清理标志
+    
     print(f"[*] 启动 Camoufox 浏览器（登录模式）...")
     print(f"[*] 验证链接: {verification_url}")
     
@@ -1862,6 +1905,7 @@ def login_with_camoufox(
     
     try:
         with Camoufox(**config) as browser:
+            _active_browser = browser  # 保存浏览器引用用于信号处理
             page = browser.new_page()
             page.set_default_timeout(timeout_ms)
             
@@ -1919,6 +1963,8 @@ def login_with_camoufox(
             
     except Exception as e:
         return LoginResult(False, f"发生异常: {str(e)}", "EXCEPTION")
+    finally:
+        _active_browser = None  # 清理全局引用
 
 
 def wait_for_page_ready(page: Page, timeout: int = 30000) -> None:
@@ -1949,6 +1995,9 @@ def register_with_camoufox(
     """
     使用 Camoufox 完成 Amazon 设备授权注册。
     """
+    global _active_browser, _cleanup_done
+    _cleanup_done = False  # 重置清理标志
+    
     print(f"[PROGRESS] init: 正在初始化浏览器...")
     print(f"[*] 启动 Camoufox 浏览器（注册模式）...")
     print(f"[*] 验证链接: {verification_url}")
@@ -1999,6 +2048,7 @@ def register_with_camoufox(
     
     try:
         with Camoufox(**config) as browser:
+            _active_browser = browser  # 保存浏览器引用用于信号处理
             page = browser.new_page()
             page.set_default_timeout(timeout_ms)
             
@@ -2243,6 +2293,8 @@ def register_with_camoufox(
             
     except Exception as e:
         return LoginResult(False, f"发生异常: {str(e)}", "EXCEPTION")
+    finally:
+        _active_browser = None  # 清理全局引用
 
 
 def main():

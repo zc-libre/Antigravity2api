@@ -94,23 +94,54 @@ export async function registerWithCamoufox(
     logger.info("启动 Camoufox 注册", { verificationUrl: verificationUrl.slice(0, 50) + "..." });
     
     return new Promise((resolve, reject) => {
-        const process = spawn(pythonPath, args, {
+        const childProcess = spawn(pythonPath, args, {
             cwd: camoufoxDir,
             env: { 
                 ...globalThis.process.env,
                 PYTHONUNBUFFERED: "1"  // 实时输出
-            }
+            },
+            detached: true  // 创建新的进程组，方便后续杀死所有子进程
         });
         
         let stdout = "";
         let stderr = "";
+        let isKilled = false;
+        
+        // 杀死进程及其所有子进程
+        const killProcess = () => {
+            if (isKilled) return;
+            isKilled = true;
+            
+            try {
+                if (childProcess.pid) {
+                    // 先发送 SIGTERM 给进程组，让 Python 有机会清理
+                    globalThis.process.kill(-childProcess.pid, "SIGTERM");
+                    
+                    // 等待 3 秒后强制杀死（如果还在运行）
+                    setTimeout(() => {
+                        try {
+                            // 检查进程是否还在运行
+                            globalThis.process.kill(-childProcess.pid, 0);
+                            // 如果没抛异常说明还在运行，发送 SIGKILL
+                            logger.warn("Python 进程未响应 SIGTERM，发送 SIGKILL");
+                            globalThis.process.kill(-childProcess.pid, "SIGKILL");
+                        } catch {
+                            // 进程已退出，忽略错误
+                        }
+                    }, 3000);
+                }
+            } catch (e) {
+                // 进程可能已经退出，忽略错误
+            }
+        };
         
         const timeout = setTimeout(() => {
-            process.kill("SIGTERM");
+            logger.warn("Camoufox 注册超时，正在终止进程...");
+            killProcess();
             reject(new Error(`Camoufox 注册超时 (${timeoutMs}ms)`));
         }, timeoutMs);
         
-        process.stdout.on("data", (data) => {
+        childProcess.stdout.on("data", (data) => {
             const text = data.toString();
             stdout += text;
             // 实时输出日志
@@ -130,12 +161,12 @@ export async function registerWithCamoufox(
             }
         });
         
-        process.stderr.on("data", (data) => {
+        childProcess.stderr.on("data", (data) => {
             stderr += data.toString();
             logger.warn("[Camoufox stderr]", { output: data.toString().trim() });
         });
         
-        process.on("close", (code) => {
+        childProcess.on("close", (code) => {
             clearTimeout(timeout);
             
             try {
@@ -167,14 +198,30 @@ export async function registerWithCamoufox(
             }
         });
         
-        process.on("error", (error) => {
+        childProcess.on("error", (error) => {
             clearTimeout(timeout);
+            killProcess();  // 确保出错时也杀死进程
             
             if ((error as NodeJS.ErrnoException).code === "ENOENT") {
                 reject(new Error(`未找到 Python 环境，请先运行: cd camoufox && bash setup.sh`));
             } else {
                 reject(error);
             }
+        });
+        
+        // 确保主进程退出时也清理子进程
+        const exitHandler = () => {
+            killProcess();
+        };
+        globalThis.process.once("exit", exitHandler);
+        globalThis.process.once("SIGINT", exitHandler);
+        globalThis.process.once("SIGTERM", exitHandler);
+        
+        // 进程关闭后移除退出处理器
+        childProcess.on("close", () => {
+            globalThis.process.removeListener("exit", exitHandler);
+            globalThis.process.removeListener("SIGINT", exitHandler);
+            globalThis.process.removeListener("SIGTERM", exitHandler);
         });
     });
 }

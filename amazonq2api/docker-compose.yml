@@ -1,0 +1,80 @@
+# ============================================
+# Amazon Q to API - Docker Compose 配置
+# ============================================
+# 
+# 使用方法:
+#   1. 复制 .env.example 为 .env 并填写配置
+#   2. 运行: docker compose up -d
+#   3. 查看日志: docker compose logs -f
+#   4. 停止: docker compose down
+# ============================================
+
+services:
+  amazonq2api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: amazonq2api:latest
+    container_name: amazonq2api
+    restart: unless-stopped
+    
+    # 端口映射
+    ports:
+      - "${PORT:-3000}:3000"
+    
+    # 环境变量（从 .env 文件加载）
+    environment:
+      # 通用配置
+      - PORT=${PORT:-3000}
+      - HEADLESS=${HEADLESS:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - OUTPUT_FILE=${OUTPUT_FILE:-output/accounts.ndjson}
+      
+      # GPTMail 配置
+      - GPTMAIL_API_KEY=${GPTMAIL_API_KEY}
+      - GPTMAIL_BASE_URL=${GPTMAIL_BASE_URL:-https://mail.chatgpt.org.uk}
+      - GPTMAIL_EMAIL_PREFIX=${GPTMAIL_EMAIL_PREFIX:-}
+      - GPTMAIL_EMAIL_DOMAIN=${GPTMAIL_EMAIL_DOMAIN:-}
+      
+      # 代理配置
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - PROXY_LIST=${PROXY_LIST:-}
+    
+    # 数据持久化
+    volumes:
+      # 账号数据持久化
+      - amazonq-data:/app/output
+      # 可选：挂载本地 .env 文件
+      # - ./.env:/app/.env:ro
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    
+    # 安全选项
+    security_opt:
+      - no-new-privileges:true
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 命名卷
+volumes:
+  amazonq-data:
+    name: amazonq2api-data

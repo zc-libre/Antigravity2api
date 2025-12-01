@@ -181,8 +181,95 @@ src/
 - **存储可靠**：NDJSON 原子追加写入
 - **代理支持**：支持 HTTP 代理和代理轮换
 
+## Docker 部署
+
+### 使用 Docker Compose（推荐）
+
+1. 配置环境变量
+
+    ```bash
+    cp .env.example .env
+    # 编辑 .env 文件，填写必要配置
+    ```
+
+2. 启动服务
+
+    ```bash
+    docker compose up -d
+    ```
+
+3. 查看日志
+
+    ```bash
+    docker compose logs -f
+    ```
+
+4. 停止服务
+
+    ```bash
+    docker compose down
+    ```
+
+### 使用 Docker 命令
+
+1. 构建镜像
+
+    ```bash
+    docker build -t amazonq2api .
+    ```
+
+2. 运行容器
+
+    ```bash
+    docker run -d --name amazonq2api \
+      -p 3000:3000 \
+      -e GPTMAIL_API_KEY=your-api-key \
+      -e GPTMAIL_BASE_URL=https://mail.chatgpt.org.uk \
+      -e HEADLESS=true \
+      -v amazonq-data:/app/output \
+      amazonq2api
+    ```
+
+    或使用 .env 文件：
+
+    ```bash
+    docker run -d --name amazonq2api \
+      -p 3000:3000 \
+      --env-file .env \
+      -v amazonq-data:/app/output \
+      amazonq2api
+    ```
+
+3. 查看日志
+
+    ```bash
+    docker logs -f amazonq2api
+    ```
+
+### Docker 环境变量说明
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `PORT` | Web 服务端口 | `3000` |
+| `HEADLESS` | 无头模式（Docker 中必须为 true） | `true` |
+| `GPTMAIL_API_KEY` | GPTMail API 密钥（必需） | - |
+| `GPTMAIL_BASE_URL` | GPTMail API 地址 | `https://mail.chatgpt.org.uk` |
+| `HTTP_PROXY` | HTTP 代理地址 | - |
+| `LOG_LEVEL` | 日志级别 | `info` |
+
+### 数据持久化
+
+账号数据存储在 `/app/output` 目录，建议挂载卷以持久化：
+
+```bash
+-v amazonq-data:/app/output
+# 或挂载本地目录
+-v $(pwd)/output:/app/output
+```
+
 ## 注意事项
 
 - 避免滥用，自动化登录可能违反服务条款，请自行评估
 - 建议使用代理并适当间隔调用，降低风控概率
 - Camoufox 初次运行会自动下载浏览器，可能需要数分钟
+- **Docker 部署必须使用无头模式** (`HEADLESS=true`)
