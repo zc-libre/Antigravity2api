@@ -1,0 +1,18 @@
+[
+  {
+    "refreshToken": "your_first_refresh_token_here",
+    "name": "account_1",
+    "disabled": false
+  },
+  {
+    "refreshToken": "your_second_refresh_token_here",
+    "name": "account_2",
+    "disabled": false
+  },
+  {
+    "refreshToken": "your_third_refresh_token_here",
+    "name": "account_3",
+    "disabled": true
+  }
+]
+

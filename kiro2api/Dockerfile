@@ -15,7 +15,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app.py token_reader.py entrypoint.sh ./
+COPY app.py config.py token_reader.py entrypoint.sh ./
+COPY models/ ./models/
+COPY auth/ ./auth/
+COPY parsers/ ./parsers/
+COPY services/ ./services/
+
+# Copy example config for multi-account setup
+COPY auth_config.json.example ./
 
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh

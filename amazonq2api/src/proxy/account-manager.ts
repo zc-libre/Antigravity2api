@@ -125,7 +125,9 @@ export class AccountManager {
      */
     async disableAccount(accountId: string, reason?: string): Promise<void> {
         const updates: AccountUpdate = {
-            enabled: false
+            enabled: false,
+            lastRefreshStatus: reason || "disabled",
+            lastRefreshTime: new Date()
         };
 
         if (reason) {

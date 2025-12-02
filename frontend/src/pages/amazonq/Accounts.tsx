@@ -17,6 +17,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -101,6 +102,8 @@ export function AmazonQAccounts() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<FilterType>('all')
   const [sortBy, setSortBy] = useState<'date' | 'email'>('date')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [accountToDelete, setAccountToDelete] = useState<Account | null>(null)
 
   useEffect(() => {
     loadAccounts()
@@ -146,18 +149,25 @@ export function AmazonQAccounts() {
     }
   }
 
-  // 删除账号
-  const deleteAccount = async (account: Account) => {
-    if (!confirm(`确定要删除账号 ${account.email} 吗？此操作不可恢复。`)) {
-      return
-    }
+  // 打开删除确认对话框
+  const openDeleteConfirm = (account: Account) => {
+    setAccountToDelete(account)
+    setDeleteConfirmOpen(true)
+  }
+
+  // 确认删除账号
+  const confirmDeleteAccount = async () => {
+    if (!accountToDelete) return
     try {
-      const res = await amazonqApi.deleteAccount(account.id)
+      const res = await amazonqApi.deleteAccount(accountToDelete.id)
       if (res.success) {
-        setAccounts(prev => prev.filter(a => a.id !== account.id))
+        setAccounts(prev => prev.filter(a => a.id !== accountToDelete.id))
       }
     } catch (error) {
       console.error('Failed to delete account:', error)
+    } finally {
+      setDeleteConfirmOpen(false)
+      setAccountToDelete(null)
     }
   }
 
@@ -442,30 +452,30 @@ export function AmazonQAccounts() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-border/50">
-                    <TableHead className="w-[280px]">邮箱</TableHead>
-                    <TableHead className="w-[100px]">标签</TableHead>
-                    <TableHead className="w-[80px]">状态</TableHead>
-                    <TableHead className="w-[100px]">Token</TableHead>
-                    <TableHead className="w-[100px]">注册时间</TableHead>
-                    <TableHead className="text-right w-[120px]">操作</TableHead>
+                    <TableHead className="w-[280px] text-center">邮箱</TableHead>
+                    <TableHead className="w-[100px] text-center">标签</TableHead>
+                    <TableHead className="w-[80px] text-center">状态</TableHead>
+                    <TableHead className="w-[100px] text-center">Token</TableHead>
+                    <TableHead className="w-[100px] text-center">注册时间</TableHead>
+                    <TableHead className="w-[140px] text-center">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAccounts.map((account, index) => (
                     <TableRow
                       key={account.id}
-                      className={`group border-border/50 hover:bg-muted/30 transition-colors ${!account.enabled ? 'opacity-60' : ''}`}
+                      className={`border-border/50 hover:bg-muted/30 transition-colors ${!account.enabled ? 'opacity-60' : ''}`}
                       style={{ animationDelay: `${index * 20}ms` }}
                     >
-                      <TableCell>
-                        <div className="flex items-center gap-3">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-3">
                           <div className={`flex items-center justify-center w-8 h-8 rounded-lg border ${account.enabled ? 'bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border-emerald-500/20' : 'bg-muted border-border'}`}>
                             <Mail className={`h-4 w-4 ${account.enabled ? 'text-emerald-500' : 'text-muted-foreground'}`} />
                           </div>
                           <span className="font-mono text-sm">{account.email}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {account.label ? (
                           <Badge variant="outline" className="font-normal">
                             {account.label}
@@ -474,14 +484,16 @@ export function AmazonQAccounts() {
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Switch
-                          checked={account.enabled}
-                          onCheckedChange={() => toggleAccountEnabled(account)}
-                          className="data-[state=checked]:bg-emerald-500"
-                        />
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <Switch
+                            checked={account.enabled}
+                            onCheckedChange={() => toggleAccountEnabled(account)}
+                            className="data-[state=checked]:bg-emerald-500"
+                          />
+                        </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {account.hasRefreshToken ? (
                           <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20">
                             <CheckCircle className="h-3 w-3 mr-1" />
@@ -494,19 +506,18 @@ export function AmazonQAccounts() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
                           <Calendar className="h-3.5 w-3.5" />
                           {formatDateShort(account.savedAt)}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => viewAccountDetail(account.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Eye className="h-4 w-4 mr-1" />
                             详情
@@ -516,7 +527,7 @@ export function AmazonQAccounts() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="h-8 w-8"
                               >
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
@@ -528,7 +539,7 @@ export function AmazonQAccounts() {
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={() => deleteAccount(account)}
+                                onClick={() => openDeleteConfirm(account)}
                                 className="text-destructive focus:text-destructive"
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
@@ -690,6 +701,44 @@ export function AmazonQAccounts() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认对话框 */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-destructive/10">
+                <Trash2 className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <DialogTitle>确认删除账号</DialogTitle>
+                <DialogDescription className="mt-1">
+                  此操作不可恢复，请谨慎操作
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              确定要删除账号 <span className="font-mono text-foreground">{accountToDelete?.email}</span> 吗？
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteAccount}
+            >
+              确认删除
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -7,9 +7,17 @@ services:
       - "8989:8989"
     environment:
       - API_KEY=ki2api-key-2024
+      # 多账号配置方式一：直接设置 JSON（取消注释并填入你的 token）
+      # - KIRO_AUTH_CONFIG=[{"refreshToken":"token1","name":"account1"},{"refreshToken":"token2","name":"account2"}]
+      
+      # 多账号配置方式二：挂载配置文件（见下方 volumes）
+      # - KIRO_AUTH_CONFIG=/app/auth_config.json
     volumes:
-      # 自动挂载token目录，实现零配置
+      # 自动挂载token目录，实现零配置（单账号模式）
       - ~/.aws/sso/cache:/root/.aws/sso/cache:ro
+      
+      # 多账号配置：挂载配置文件（取消注释并创建 auth_config.json）
+      # - ./auth_config.json:/app/auth_config.json:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8989/health"]

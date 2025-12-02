@@ -1,2 +1,6 @@
 test/
 docker.log
+# 敏感配置文件
+auth_config.json
+.env
+*.env.local
