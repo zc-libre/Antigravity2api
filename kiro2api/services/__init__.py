@@ -6,6 +6,8 @@ from .response_handler import (
     create_non_streaming_response,
     create_streaming_response,
 )
+from .claude_converter import convert_claude_to_codewhisperer_request
+from .claude_stream_handler import ClaudeStreamHandler, handle_claude_stream
 
 __all__ = [
     "build_codewhisperer_request",
@@ -14,5 +16,8 @@ __all__ = [
     "create_usage_stats",
     "create_non_streaming_response",
     "create_streaming_response",
+    "convert_claude_to_codewhisperer_request",
+    "ClaudeStreamHandler",
+    "handle_claude_stream",
 ]
 

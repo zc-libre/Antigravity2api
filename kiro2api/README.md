@@ -1,13 +1,14 @@
-# Ki2API - Claude Sonnet 4 OpenAI兼容API
+# Ki2API - Claude Sonnet 4 OpenAI/Claude 兼容API
 
-一个简单易用的Docker化OpenAI兼容API服务，专门用于Claude Sonnet 4.5模型。
+一个简单易用的Docker化OpenAI/Claude兼容API服务，专门用于Claude Sonnet 4.5模型。
 
 ## 功能特点
 
 - 🐳 **Docker傻瓜式运行** - 一行命令启动服务
 - 🔑 **固定API密钥** - 使用 `ki2api-key-2024`
 - 🎯 **多模型支持** - 支持 `claude-sonnet-4-5-20250929` 等模型
-- 🌐 **OpenAI兼容** - 完全兼容OpenAI API格式
+- 🌐 **OpenAI兼容** - 完全兼容OpenAI API格式 (`/v1/chat/completions`)
+- 🤖 **Claude兼容** - 完全兼容Claude API格式 (`/v1/messages`)
 - 📡 **流式传输** - 支持SSE流式响应
 - 🔄 **自动token刷新** - 支持token过期自动刷新
 - 👥 **多账号轮询** - 支持配置多个账号自动轮询
@@ -103,6 +104,49 @@ curl -X POST http://localhost:8989/v1/chat/completions \
   }'
 ```
 
+#### Claude API 格式（/v1/messages）
+```bash
+curl -X POST http://localhost:8989/v1/messages \
+  -H "x-api-key: ki2api-key-2024" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4.5",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "user", "content": "Hello, Claude!"}
+    ]
+  }'
+```
+
+#### Claude API 带工具调用
+```bash
+curl -X POST http://localhost:8989/v1/messages \
+  -H "x-api-key: ki2api-key-2024" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4.5",
+    "max_tokens": 1024,
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Get the current weather in a given location",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "location": {"type": "string"}
+          },
+          "required": ["location"]
+        }
+      }
+    ],
+    "messages": [
+      {"role": "user", "content": "What is the weather in San Francisco?"}
+    ]
+  }'
+```
+
 #### 查看Token状态
 ```bash
 curl -H "Authorization: Bearer ki2api-key-2024" \
@@ -152,19 +196,35 @@ docker run -d \
 
 ## API端点
 
-### GET /v1/models
+### OpenAI 兼容端点
+
+#### GET /v1/models
 获取可用模型列表
 
-### POST /v1/chat/completions
-创建聊天完成
+#### POST /v1/chat/completions
+创建聊天完成（OpenAI格式）
 
-### GET /health
+### Claude 兼容端点
+
+#### POST /v1/messages
+创建消息（Claude API格式）
+
+支持的功能：
+- 流式响应 (SSE)
+- 工具调用 (Tool Use)
+- 系统提示 (System Prompt)
+- 图片输入 (Images)
+- 多轮对话
+
+### 管理端点
+
+#### GET /health
 健康检查端点
 
-### GET /v1/token/status
+#### GET /v1/token/status
 获取多账号Token状态（需要认证）
 
-### POST /v1/token/reset
+#### POST /v1/token/reset
 重置所有Token的耗尽状态（需要认证）
 
 ## 环境变量
@@ -256,24 +316,27 @@ python app.py 2>&1 | tee ki2api.log
 ## 项目结构
 ```
 kiro2api/
-├── app.py                    # 主应用文件
-├── config.py                 # 配置文件
+├── app.py                        # 主应用文件
+├── config.py                     # 配置文件
 ├── auth/
 │   ├── __init__.py
-│   ├── api_key.py           # API密钥验证
-│   ├── config.py            # 多账号配置加载
-│   └── token_manager.py     # 多账号Token管理器
+│   ├── api_key.py               # API密钥验证
+│   ├── config.py                # 多账号配置加载
+│   └── token_manager.py         # 多账号Token管理器
 ├── models/
-│   └── schemas.py           # 数据模型
+│   ├── schemas.py               # OpenAI兼容数据模型
+│   └── claude_schemas.py        # Claude API数据模型
 ├── services/
-│   ├── request_builder.py   # 请求构建
-│   └── response_handler.py  # 响应处理
-├── parsers/                  # 解析器
-├── auth_config.json.example # 多账号配置示例
-├── Dockerfile               # Docker镜像定义
-├── docker-compose.yml       # Docker Compose配置
-├── requirements.txt         # Python依赖
-└── README.md               # 本文档
+│   ├── request_builder.py       # OpenAI请求构建
+│   ├── response_handler.py      # OpenAI响应处理
+│   ├── claude_converter.py      # Claude请求转换器
+│   └── claude_stream_handler.py # Claude流处理器
+├── parsers/                      # 解析器
+├── auth_config.json.example     # 多账号配置示例
+├── Dockerfile                   # Docker镜像定义
+├── docker-compose.yml           # Docker Compose配置
+├── requirements.txt             # Python依赖
+└── README.md                    # 本文档
 ```
 
 ## 许可证

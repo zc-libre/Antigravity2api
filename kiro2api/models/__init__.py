@@ -14,8 +14,23 @@ from .schemas import (
     ChatCompletionStreamResponse,
     ErrorResponse,
 )
+from .claude_schemas import (
+    ClaudeTextContent,
+    ClaudeImageSource,
+    ClaudeImageContent,
+    ClaudeToolUseContent,
+    ClaudeToolResultContent,
+    ClaudeMessage,
+    ClaudeTool,
+    ClaudeSystemBlock,
+    ClaudeRequest,
+    ClaudeUsage,
+    ClaudeResponseContentBlock,
+    ClaudeResponse,
+)
 
 __all__ = [
+    # OpenAI 兼容模型
     "ImageUrl",
     "ContentPart",
     "ToolCall",
@@ -30,5 +45,18 @@ __all__ = [
     "ChatCompletionResponse",
     "ChatCompletionStreamResponse",
     "ErrorResponse",
+    # Claude 兼容模型
+    "ClaudeTextContent",
+    "ClaudeImageSource",
+    "ClaudeImageContent",
+    "ClaudeToolUseContent",
+    "ClaudeToolResultContent",
+    "ClaudeMessage",
+    "ClaudeTool",
+    "ClaudeSystemBlock",
+    "ClaudeRequest",
+    "ClaudeUsage",
+    "ClaudeResponseContentBlock",
+    "ClaudeResponse",
 ]
 

@@ -18,8 +18,9 @@ PROFILE_ARN = "arn:aws:codewhisperer:us-east-1:699475941385:profile/EHGA3GRVQMUK
 
 # Model mapping
 MODEL_MAP = {
-    "claude-sonnet-4-5-20250929": "CLAUDE_SONNET_4_5_20250929_V1_0",
-    "claude-3-5-haiku-20241022":  "auto",
-    "claude-opus-4.5":"claude-opus-4.5"
+    "claude-sonnet-4-5-20250929": "claude-sonnet-4.5",
+    "claude-sonnet-4":  "claude-sonnet-4",
+    "claude-opus-4-5-20251101":"claude-opus-4.5",
+    "claude-haiku-4-5-20251001":"claude-haiku-4.5"
 }
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
