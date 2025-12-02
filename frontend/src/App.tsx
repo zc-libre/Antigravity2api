@@ -20,6 +20,10 @@ import { AmazonQDashboard } from '@/pages/amazonq/Dashboard'
 import { AmazonQAccounts } from '@/pages/amazonq/Accounts'
 import { AmazonQTasks } from '@/pages/amazonq/Tasks'
 
+// Kiro pages
+import { KiroDashboard } from '@/pages/kiro/Dashboard'
+import { KiroAccounts } from '@/pages/kiro/Accounts'
+
 function App() {
   return (
     <BrowserRouter>
@@ -45,6 +49,12 @@ function App() {
           <Route index element={<AmazonQDashboard />} />
           <Route path="accounts" element={<AmazonQAccounts />} />
           <Route path="tasks" element={<AmazonQTasks />} />
+        </Route>
+
+        {/* Kiro routes */}
+        <Route path="/kiro" element={<MainLayout />}>
+          <Route index element={<KiroDashboard />} />
+          <Route path="accounts" element={<KiroAccounts />} />
         </Route>
 
         {/* Default redirect */}

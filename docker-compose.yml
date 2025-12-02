@@ -1,0 +1,256 @@
+# ============================================
+# AI2API - 统一 Docker Compose 配置
+# ============================================
+# 
+# 包含的服务:
+#   - frontend: React 前端 + Nginx 反向代理 (端口 80)
+#   - antigravity: Claude API 代理服务 (端口 8045)
+#   - amazonq2api: Amazon Q API 服务 (端口 3000)
+#   - kiro2api: Kiro API 服务 (端口 8989)
+#   - postgres: PostgreSQL 数据库 (amazonq2api 依赖)
+#
+# 使用方法:
+#   1. 复制 .env.example 为 .env 并填写配置
+#   2. 运行: docker compose up -d
+#   3. 查看日志: docker compose logs -f [服务名]
+#   4. 停止: docker compose down
+#   5. 重建: docker compose up -d --build
+#
+# 单独启动某个服务:
+#   docker compose up -d frontend antigravity
+# ============================================
+
+services:
+  # ============================================
+  # PostgreSQL 数据库 (amazonq2api 依赖)
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai2api-postgres
+    restart: unless-stopped
+    
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-ai2api}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ai2api_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-ai2api}
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai2api} -d ${POSTGRES_DB:-ai2api}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    networks:
+      - ai2api-network
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # Amazon Q API 服务
+  # ============================================
+  amazonq2api:
+    build:
+      context: ./amazonq2api
+      dockerfile: Dockerfile
+    image: ai2api/amazonq2api:latest
+    container_name: ai2api-amazonq
+    restart: unless-stopped
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    # 可选：外部直接访问端口（前端代理后可注释掉）
+    ports:
+      - "${AMAZONQ_PORT:-3000}:3000"
+    
+    environment:
+      - PORT=3000
+      - HEADLESS=${HEADLESS:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ai2api}:${POSTGRES_PASSWORD:-ai2api_secret}@postgres:5432/${POSTGRES_DB:-ai2api}?schema=public
+      - API_KEY=${AMAZONQ_API_KEY:-}
+      - GPTMAIL_API_KEY=${GPTMAIL_API_KEY:-}
+      - GPTMAIL_BASE_URL=${GPTMAIL_BASE_URL:-https://mail.chatgpt.org.uk}
+      - GPTMAIL_EMAIL_PREFIX=${GPTMAIL_EMAIL_PREFIX:-}
+      - GPTMAIL_EMAIL_DOMAIN=${GPTMAIL_EMAIL_DOMAIN:-}
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - PROXY_LIST=${PROXY_LIST:-}
+    
+    networks:
+      - ai2api-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s  # 给数据库迁移足够时间
+    
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # Antigravity - Claude API 代理服务
+  # ============================================
+  antigravity:
+    build:
+      context: ./antigravity
+      dockerfile: Dockerfile
+    image: ai2api/antigravity:latest
+    container_name: ai2api-antigravity
+    restart: unless-stopped
+    
+    # 可选：外部直接访问端口（前端代理后可注释掉）
+    ports:
+      - "${ANTIGRAVITY_PORT:-8045}:8045"
+    
+    volumes:
+      # 配置文件（必须先创建）
+      - ./antigravity/config.json:/app/config.json:ro
+      # 数据持久化
+      - antigravity-data:/app/data
+    
+    environment:
+      - NODE_ENV=production
+    
+    networks:
+      - ai2api-network
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8045/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # Kiro API 服务
+  # ============================================
+  kiro2api:
+    build:
+      context: ./kiro2api
+      dockerfile: Dockerfile
+    image: ai2api/kiro2api:latest
+    container_name: ai2api-kiro
+    restart: unless-stopped
+    
+    # 依赖数据库（与 amazonq2api 共享）
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # 确保 amazonq2api 先启动完成数据库迁移
+      amazonq2api:
+        condition: service_healthy
+    
+    # 可选：外部直接访问端口（前端代理后可注释掉）
+    ports:
+      - "${KIRO_PORT:-8989}:8989"
+    
+    environment:
+      - API_KEY=${KIRO_API_KEY:-ki2api-key-2024}
+      # 数据库配置（与 amazonq2api 共享同一数据库）
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ai2api}:${POSTGRES_PASSWORD:-ai2api_secret}@postgres:5432/${POSTGRES_DB:-ai2api}?schema=public
+      # 多账号配置（可选）
+      - KIRO_AUTH_CONFIG=${KIRO_AUTH_CONFIG:-}
+    
+    volumes:
+      # 自动挂载 AWS SSO token 目录（单账号模式）
+      - ${AWS_SSO_CACHE_PATH:-~/.aws/sso/cache}:/root/.aws/sso/cache:ro
+      # 多账号配置文件（可选，取消注释启用）
+      # - ./kiro2api/auth_config.json:/app/auth_config.json:ro
+    
+    networks:
+      - ai2api-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # Frontend - React + Nginx 反向代理
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ai2api/frontend:latest
+    container_name: ai2api-frontend
+    restart: unless-stopped
+    
+    depends_on:
+      - antigravity
+      - amazonq2api
+      - kiro2api
+    
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    
+    networks:
+      - ai2api-network
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================
+# 网络配置
+# ============================================
+networks:
+  ai2api-network:
+    name: ai2api-network
+    driver: bridge
+
+# ============================================
+# 数据卷
+# ============================================
+volumes:
+  postgres-data:
+    name: ai2api-postgres-data
+  antigravity-data:
+    name: ai2api-antigravity-data

@@ -13,27 +13,37 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // API 代理配置 - 使用 /antigravity/api 前缀
+      // Antigravity API 代理
       '/antigravity/api': {
         target: 'http://localhost:8045',
         changeOrigin: true,
-      },
-      // Amazon Q API 代理 - 使用 /amazonq/api 前缀
-      '/amazonq/api': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/amazonq\/api/, '/api'),
-      },
-      // Amazon Q 健康检查代理
-      '/amazonq/health': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/amazonq\/health/, '/health'),
       },
       // 上传文件代理
       '/uploads': {
         target: 'http://localhost:8045',
         changeOrigin: true,
+      },
+      // Amazon Q API 代理
+      '/amazonq/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/amazonq\/api/, '/api'),
+      },
+      '/amazonq/health': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/amazonq\/health/, '/health'),
+      },
+      // Kiro API 代理
+      '/kiro/api': {
+        target: 'http://localhost:8989',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/kiro\/api/, '/api'),
+      },
+      '/kiro/health': {
+        target: 'http://localhost:8989',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/kiro\/health/, '/health'),
       },
     },
   },

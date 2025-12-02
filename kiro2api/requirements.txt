@@ -4,3 +4,5 @@ httpx==0.25.2
 python-dotenv==1.0.0
 pydantic==2.5.0
 json_repair==0.48.0
+asyncpg==0.30.0
+sqlalchemy[asyncio]==2.0.36

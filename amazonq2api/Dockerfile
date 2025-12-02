@@ -76,6 +76,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     wget \
     curl \
+    netcat-openbsd \
     # 清理
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -166,8 +167,11 @@ USER appuser
 EXPOSE 3000
 
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# 启动命令（使用 tsx 直接运行 TypeScript）
-CMD ["npx", "tsx", "src/server.ts"]
+# 确保 entrypoint 脚本可执行
+RUN chmod +x /app/entrypoint.sh
+
+# 使用 entrypoint 脚本启动（会先运行数据库迁移）
+ENTRYPOINT ["/app/entrypoint.sh"]

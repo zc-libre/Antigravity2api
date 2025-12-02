@@ -2,8 +2,10 @@ import time
 import json
 import logging
 import httpx
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from config import MODEL_MAP, KIRO_BASE_URL
 from models import ChatCompletionRequest
@@ -12,17 +14,41 @@ from auth import verify_api_key, token_manager
 from services import create_non_streaming_response, create_streaming_response
 from services.claude_converter import convert_claude_to_codewhisperer_request
 from services.claude_stream_handler import ClaudeStreamHandler
+from storage import init_db, close_db, AccountStore, get_db
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)  # for dev
 # logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时初始化数据库
+    await init_db()
+    logger.info("数据库连接已初始化")
+    yield
+    # 关闭时清理数据库连接
+    await close_db()
+    logger.info("数据库连接已关闭")
+
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Ki2API - Claude Sonnet 4 OpenAI/Claude Compatible API",
     description="OpenAI/Claude-compatible API for Claude Sonnet 4 via AWS CodeWhisperer with multi-account rotation support",
-    version="3.2.0"
+    version="3.3.0",
+    lifespan=lifespan
+)
+
+# 添加 CORS 中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -253,20 +279,179 @@ async def create_message(
         )
 
 
+# ============================================================================
+# 账号管理 API 端点
+# ============================================================================
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def get_db_session():
+    """获取数据库会话的依赖"""
+    async for session in get_db():
+        yield session
+
+
+@app.get("/api/accounts")
+async def list_accounts(session: AsyncSession = Depends(get_db_session)):
+    """获取所有 Kiro 账号"""
+    store = AccountStore(session)
+    accounts = await store.find_all(type="kiro")
+    return {
+        "success": True,
+        "total": len(accounts),
+        "accounts": [
+            {
+                "id": acc.id,
+                "email": acc.awsEmail,
+                "label": acc.label,
+                "savedAt": acc.savedAt.isoformat() if acc.savedAt else None,
+                "enabled": acc.enabled,
+                "type": acc.type,
+                "lastRefreshStatus": acc.lastRefreshStatus,
+                "lastRefreshTime": acc.lastRefreshTime.isoformat() if acc.lastRefreshTime else None,
+                "hasRefreshToken": bool(acc.refreshToken),
+            }
+            for acc in accounts
+        ]
+    }
+
+
+@app.get("/api/accounts/{account_id}")
+async def get_account_detail(
+    account_id: str,
+    session: AsyncSession = Depends(get_db_session)
+):
+    """获取账号详情"""
+    store = AccountStore(session)
+    account = await store.find_by_id(account_id)
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    return {
+        "success": True,
+        "account": {
+            "id": account.id,
+            "email": account.awsEmail,
+            "password": account.awsPassword,
+            "clientId": account.clientId,
+            "clientSecret": account.clientSecret,
+            "accessToken": account.accessToken,
+            "refreshToken": account.refreshToken,
+            "label": account.label,
+            "savedAt": account.savedAt.isoformat() if account.savedAt else None,
+            "expiresIn": account.expiresIn,
+            "enabled": account.enabled,
+            "type": account.type,
+            "lastRefreshStatus": account.lastRefreshStatus,
+            "lastRefreshTime": account.lastRefreshTime.isoformat() if account.lastRefreshTime else None,
+        }
+    }
+
+
+from pydantic import BaseModel
+from typing import Optional
+
+
+class CreateAccountRequest(BaseModel):
+    """创建账号请求"""
+    refreshToken: str
+    name: Optional[str] = None
+    enabled: bool = True
+
+
+class UpdateAccountRequest(BaseModel):
+    """更新账号请求"""
+    enabled: Optional[bool] = None
+    label: Optional[str] = None
+
+
+@app.post("/api/accounts")
+async def create_account(
+    request: CreateAccountRequest,
+    session: AsyncSession = Depends(get_db_session)
+):
+    """创建新账号"""
+    store = AccountStore(session)
+    account = await store.create(
+        refresh_token=request.refreshToken,
+        name=request.name,
+        enabled=request.enabled,
+    )
+
+    return {
+        "success": True,
+        "account": {
+            "id": account.id,
+            "label": account.label,
+            "enabled": account.enabled,
+            "type": account.type,
+        }
+    }
+
+
+@app.patch("/api/accounts/{account_id}")
+async def update_account(
+    account_id: str,
+    request: UpdateAccountRequest,
+    session: AsyncSession = Depends(get_db_session)
+):
+    """更新账号"""
+    store = AccountStore(session)
+    account = await store.update(
+        id=account_id,
+        enabled=request.enabled,
+        label=request.label,
+    )
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    return {
+        "success": True,
+        "account": {
+            "id": account.id,
+            "email": account.awsEmail,
+            "label": account.label,
+            "enabled": account.enabled,
+        }
+    }
+
+
+@app.delete("/api/accounts/{account_id}")
+async def delete_account(
+    account_id: str,
+    session: AsyncSession = Depends(get_db_session)
+):
+    """删除账号"""
+    store = AccountStore(session)
+    deleted = await store.delete(account_id)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    return {
+        "success": True,
+        "message": "账号已删除"
+    }
+
+
 @app.get("/")
 async def root():
     """Root endpoint with service information"""
     return {
         "service": "Ki2API",
         "description": "OpenAI/Claude-compatible API for Claude Sonnet 4 via AWS CodeWhisperer with multi-account rotation support",
-        "version": "3.2.0",
+        "version": "3.3.0",
         "endpoints": {
             "models": "/v1/models",
             "chat": "/v1/chat/completions",
             "messages": "/v1/messages",
             "health": "/health",
             "token_status": "/v1/token/status",
-            "token_reset": "/v1/token/reset"
+            "token_reset": "/v1/token/reset",
+            "accounts": "/api/accounts"
         },
         "features": {
             "streaming": True,
@@ -278,7 +463,8 @@ async def root():
             "tool_call_deduplication": True,
             "multi_account_rotation": True,
             "rate_limit_failover": True,
-            "claude_api_compatible": True
+            "claude_api_compatible": True,
+            "database_storage": True
         }
     }
 

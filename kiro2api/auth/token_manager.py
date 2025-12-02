@@ -1,6 +1,10 @@
 """
 多账号 Token 管理器
 实现轮询选择策略、token 缓存和自动刷新
+
+支持两种数据源：
+1. 数据库（优先）- 从 PostgreSQL 读取 type='kiro' 的账号
+2. 配置文件（回退）- 从环境变量或 JSON 文件读取
 """
 import os
 import time
@@ -41,41 +45,102 @@ class CachedToken:
 class MultiAccountTokenManager:
     """
     多账号 Token 管理器
-    
+
     功能：
     - 支持多个 Kiro 账号配置
     - 轮询策略选择可用 token
     - 自动刷新过期 token
     - 错误处理和故障转移
+    - 支持从数据库或配置文件加载账号
     """
-    
+
     REFRESH_URL = "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken"
     TOKEN_TTL_SECONDS = 3300  # 55 分钟 TTL
-    
+
     def __init__(self):
         self.configs: List[AuthConfig] = []
         self.cached_tokens: dict[str, CachedToken] = {}
         self.current_index: int = 0
         self.refresh_lock = asyncio.Lock()
         self._initialized = False
-    
+        self._use_database = False  # 是否使用数据库
+
     async def initialize(self):
         """初始化管理器，加载配置并预热 token"""
         if self._initialized:
             return
-        
+
         try:
-            self.configs = load_auth_configs()
-            logger.info(f"TokenManager 初始化完成，共加载 {len(self.configs)} 个账号配置")
-            
+            # 优先尝试从数据库加载
+            db_configs = await self._load_from_database()
+            if db_configs:
+                self.configs = db_configs
+                self._use_database = True
+                logger.info(f"TokenManager 从数据库加载了 {len(self.configs)} 个账号")
+            else:
+                # 回退到配置文件
+                self.configs = load_auth_configs()
+                logger.info(f"TokenManager 从配置文件加载了 {len(self.configs)} 个账号")
+
             # 预热第一个 token
             await self._warmup_first_token()
             self._initialized = True
-            
+
         except Exception as e:
             logger.error(f"TokenManager 初始化失败: {e}")
             raise
-    
+
+    async def _load_from_database(self) -> List[AuthConfig]:
+        """从数据库加载账号配置"""
+        try:
+            # 检查是否配置了数据库
+            database_url = os.getenv("DATABASE_URL")
+            if not database_url:
+                logger.debug("未配置 DATABASE_URL，跳过数据库加载")
+                return []
+
+            # 动态导入以避免循环依赖
+            from storage import init_db, get_db, AccountStore
+
+            await init_db()
+
+            async for session in get_db():
+                store = AccountStore(session)
+                accounts = await store.find_enabled(type="kiro")
+
+                configs = []
+                for acc in accounts:
+                    if acc.refreshToken:
+                        configs.append(AuthConfig(
+                            refresh_token=acc.refreshToken,
+                            access_token=acc.accessToken,
+                            disabled=not acc.enabled,
+                            name=acc.label or acc.id,
+                        ))
+
+                return configs
+        except Exception as e:
+            logger.warning(f"从数据库加载账号失败: {e}，将回退到配置文件")
+            return []
+
+    async def reload_from_database(self):
+        """重新从数据库加载账号配置（用于账号变更后刷新）"""
+        if not self._use_database:
+            logger.warning("当前未使用数据库模式，无法重新加载")
+            return False
+
+        try:
+            db_configs = await self._load_from_database()
+            if db_configs:
+                self.configs = db_configs
+                self.current_index = 0
+                logger.info(f"已重新加载 {len(self.configs)} 个账号配置")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"重新加载账号配置失败: {e}")
+            return False
+
     async def _warmup_first_token(self):
         """预热第一个 token"""
         if not self.configs:

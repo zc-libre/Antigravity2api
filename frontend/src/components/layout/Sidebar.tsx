@@ -87,6 +87,16 @@ const navGroups: NavGroup[] = [
       { icon: ListTodo, label: '任务管理', path: '/amazonq/tasks' },
     ],
   },
+  {
+    icon: Sparkles,
+    label: 'Kiro',
+    basePath: '/kiro',
+    accentColor: 'from-violet-500 to-purple-500',
+    children: [
+      { icon: Home, label: '概览', path: '/kiro' },
+      { icon: Users, label: '账号管理', path: '/kiro/accounts' },
+    ],
+  },
 ]
 
 export function Sidebar({ isCollapsed, onToggle, theme, onThemeToggle, className }: SidebarProps) {

@@ -382,3 +382,59 @@ export const amazonqApi = {
     amazonqRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 
+// Kiro API
+const KIRO_API_BASE = '/kiro'
+
+async function kiroRequest<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...options?.headers as Record<string, string>,
+    }
+    
+    const response = await fetch(`${KIRO_API_BASE}${url}`, {
+      ...options,
+      headers,
+    })
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }))
+      return { success: false, error: error.error || error.message || 'Request failed' }
+    }
+    
+    const data = await response.json()
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+export const kiroApi = {
+  // 健康检查
+  getHealth: () => kiroRequest('/health'),
+
+  // 获取所有账号
+  getAccounts: () => kiroRequest('/api/accounts'),
+
+  // 获取账号详情
+  getAccountDetail: (id: string) => kiroRequest(`/api/accounts/${encodeURIComponent(id)}`),
+
+  // 创建账号
+  createAccount: (data: { refreshToken: string; name?: string; enabled?: boolean }) =>
+    kiroRequest('/api/accounts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 更新账号（启用/禁用、标签）
+  updateAccount: (id: string, data: { enabled?: boolean; label?: string }) =>
+    kiroRequest(`/api/accounts/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // 删除账号
+  deleteAccount: (id: string) =>
+    kiroRequest(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+}
+
