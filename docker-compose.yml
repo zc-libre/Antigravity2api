@@ -1,13 +1,11 @@
 # ============================================
 # AI2API - 统一 Docker Compose 配置
 # ============================================
-# 
+#
 # 包含的服务:
 #   - frontend: React 前端 + Nginx 反向代理 (端口 80)
 #   - antigravity: Claude API 代理服务 (端口 8045)
-#   - amazonq2api: Amazon Q API 服务 (端口 3000)
 #   - kiro2api: Kiro API 服务 (端口 8989)
-#   - postgres: PostgreSQL 数据库 (amazonq2api 依赖)
 #
 # 使用方法:
 #   1. 复制 .env.example 为 .env 并填写配置
@@ -22,92 +20,30 @@
 
 services:
   # ============================================
-  # PostgreSQL 数据库 (amazonq2api 依赖)
+  # PostgreSQL 数据库 (kiro2api 依赖)
   # ============================================
   postgres:
     image: postgres:16-alpine
     container_name: ai2api-postgres
     restart: unless-stopped
-    
+
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-ai2api}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ai2api_secret}
       - POSTGRES_DB=${POSTGRES_DB:-ai2api}
-    
+
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai2api} -d ${POSTGRES_DB:-ai2api}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    
-    networks:
-      - proxy-net    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
-  # ============================================
-  # Amazon Q API 服务
-  # ============================================
-  amazonq2api:
-    build:
-      context: ./amazonq2api
-      dockerfile: Dockerfile
-    image: ai2api/amazonq2api:latest
-    container_name: ai2api-amazonq
-    restart: unless-stopped
-    
-    depends_on:
-      postgres:
-        condition: service_healthy
-    
-    # 可选：外部直接访问端口（前端代理后可注释掉）
-    ports:
-      - "${AMAZONQ_PORT:-3000}:3000"
-    
-    environment:
-      - PORT=3000
-      - HEADLESS=${HEADLESS:-true}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-ai2api}:${POSTGRES_PASSWORD:-ai2api_secret}@postgres:5432/${POSTGRES_DB:-ai2api}?schema=public
-      - API_KEY=${AMAZONQ_API_KEY:-}
-      - GPTMAIL_API_KEY=${GPTMAIL_API_KEY:-}
-      - GPTMAIL_BASE_URL=${GPTMAIL_BASE_URL:-https://mail.chatgpt.org.uk}
-      - GPTMAIL_EMAIL_PREFIX=${GPTMAIL_EMAIL_PREFIX:-}
-      - GPTMAIL_EMAIL_DOMAIN=${GPTMAIL_EMAIL_DOMAIN:-}
-
-
-      # 通过“容器名”访问代理（无需网络别名）
-      - HTTP_PROXY=http://mihomo:7890
-      - HTTPS_PROXY=http://mihomo:7890
-      - ALL_PROXY=socks5h://mihomo:7890
-      - NO_PROXY=localhost,127.0.0.1,::1,mihomo        
     networks:
       - proxy-net
-    
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s  # 给数据库迁移足够时间
-    
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
-    
-    security_opt:
-      - no-new-privileges:true
-    
     logging:
       driver: "json-file"
       options:
@@ -164,12 +100,9 @@ services:
     container_name: ai2api-kiro
     restart: unless-stopped
     
-    # 依赖数据库（与 amazonq2api 共享）
+    # 依赖数据库
     depends_on:
       postgres:
-        condition: service_healthy
-      # 确保 amazonq2api 先启动完成数据库迁移
-      amazonq2api:
         condition: service_healthy
     
     # 可选：外部直接访问端口（前端代理后可注释掉）
@@ -178,13 +111,18 @@ services:
     
     environment:
       - API_KEY=${KIRO_API_KEY:-ki2api-key-2024}
-      # 数据库配置（与 amazonq2api 共享同一数据库）
+      # 数据库配置
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ai2api}:${POSTGRES_PASSWORD:-ai2api_secret}@postgres:5432/${POSTGRES_DB:-ai2api}?schema=public
       # 多账号配置（可选）
       - KIRO_AUTH_CONFIG=${KIRO_AUTH_CONFIG:-}
-    
-
-      # 通过“容器名”访问代理（无需网络别名）
+      # GPTMail 临时邮箱配置（自动注册功能）
+      - GPTMAIL_API_KEY=${GPTMAIL_API_KEY:-gpt-z9b4c6d2e7f3}
+      - GPTMAIL_BASE_URL=${GPTMAIL_BASE_URL:-https://mail.chatgpt.org.uk}
+      - GPTMAIL_EMAIL_PREFIX=${GPTMAIL_EMAIL_PREFIX:-}
+      - GPTMAIL_EMAIL_DOMAIN=${GPTMAIL_EMAIL_DOMAIN:-}
+      # 浏览器自动化配置
+      - HEADLESS=${HEADLESS:-true}
+      # 通过"容器名"访问代理（无需网络别名）
       - HTTP_PROXY=http://mihomo:7890
       - HTTPS_PROXY=http://mihomo:7890
       - ALL_PROXY=socks5h://mihomo:7890
@@ -224,7 +162,6 @@ services:
     
     depends_on:
       - antigravity
-      - amazonq2api
       - kiro2api
     
     ports:
