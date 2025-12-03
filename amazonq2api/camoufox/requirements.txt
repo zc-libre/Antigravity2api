@@ -1,8 +1,0 @@
-# Camoufox 反检测浏览器自动化
-camoufox[geoip]>=0.4.0
-playwright>=1.40.0
-
-# 工具库
-python-dotenv>=1.0.0
-pyotp>=2.9.0
-
