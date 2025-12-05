@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  ki2api:
+    build: .
+    ports:
+      - "8989:8989"
+    environment:
+      - API_KEY=ki2api-key-2024
+    volumes:
+      # 自动挂载token目录，实现零配置
+      - ~/.aws/sso/cache:/root/.aws/sso/cache:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

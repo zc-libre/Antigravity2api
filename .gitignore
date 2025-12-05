@@ -33,6 +33,7 @@ Thumbs.db
 dist/
 build/
 *.tsbuildinfo
+.nitro/
 
 # 数据目录
 data/
